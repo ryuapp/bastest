@@ -1,0 +1,17 @@
+{
+  "imports": {
+    "bastest": "./src/mod.ts",
+    "@types/node": "catalog:"
+  },
+  "compilerOptions": {
+    "types": [
+      "@types/node"
+    ]
+  },
+  "tasks": {
+    "build": "tsdown --config-loader unrun --config tsdown.config.ts",
+    "typecheck": "deno check --unstable-tsgo",
+    "test": "deno task build && cargo run --quiet -p bastest --",
+    "clean": "cargo run --quiet -p bastest -- clean"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "workspace": [
+    "./packages/*",
+    "./benchmarks/*"
+  ],
+  "exclude": [
+    "**/.tmp/**",
+    "**/.bastest/**",
+    "**/dist/**",
+    "target/**"
+  ],
+  "tasks": {
+    "build": "deno task --cwd packages/bastest build",
+    "build:npm": "deno run --allow-read --allow-write --allow-run --allow-env scripts/build-npm.ts",
+    "build:rust": "deno task build && cargo build --release -p bastest",
+    "format": "deno fmt && cargo fmt -p bastest",
+    "format:check": "deno fmt --check && cargo fmt -p bastest -- --check",
+    "lint": "deno task build && deno lint && cargo clippy -p bastest --all-targets -- -D warnings",
+    "lint:check": "deno task build && deno lint && cargo clippy -p bastest --all-targets -- -D warnings",
+    "typecheck": "deno task --cwd packages/bastest typecheck",
+    "test": "deno task --cwd packages/bastest test",
+    "bench:initial-run": "deno task --cwd benchmarks/initial-run bench",
+    "bench:in-source-test": "deno task --cwd benchmarks/in-source-test bench",
+    "clean": "deno task --cwd packages/bastest clean"
+  },
+  "nodeModulesDir": "manual",
+  "catalog": {
+    "@typescript/native-preview": "7.0.0-dev.20260614.1",
+    "@types/node": "25.9.3",
+    "tsdown": "0.22.2",
+    "unrun": "0.3.1",
+    "vitest": "4.1.8"
+  },
+  "fmt": {
+    "proseWrap": "preserve"
+  },
+  "imports": {
+    "dax": "npm:dax@0.48.3",
+    "npm": "npm:npm@11.17.0",
+    "vitest": "npm:vitest@4.1.8"
+  }
+}

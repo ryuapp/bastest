@@ -1,0 +1,18 @@
+{
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1.0.19",
+    "vitest": "catalog:"
+  },
+  "tasks": {
+    "deno-test": "deno test --quiet --allow-read cases/deno/basic_test.ts",
+    "node-test": "node --test cases/node/basic_test.ts",
+    "vitest": "vitest run --reporter minimal cases/vitest/basic.test.ts",
+    "prepare:bastest-platform": "deno run --allow-read --allow-write ../prepare-bastest-platform.ts",
+    "bastest": "node ../../packages/bastest/bin/bastest.mjs cases/bastest/basic_test.ts",
+    "bastest-core": "deno run --allow-run --allow-env --allow-read ../run-bastest-core.ts cases/bastest/basic_test.ts",
+    "bench": {
+      "command": "deno bench --allow-read --allow-write --allow-run --allow-env run.ts",
+      "dependencies": ["build:rust", "prepare:bastest-platform"]
+    }
+  }
+}

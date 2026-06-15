@@ -1,0 +1,15 @@
+{
+  "imports": {
+    "vitest": "catalog:"
+  },
+  "tasks": {
+    "vitest": "vitest run --reporter minimal --root .tmp/vitest",
+    "prepare:bastest-platform": "deno run --allow-read --allow-write ../prepare-bastest-platform.ts",
+    "bastest": "deno run --allow-run --allow-env --allow-read ../run-command.ts .tmp/bastest node ../../../../packages/bastest/bin/bastest.mjs",
+    "bastest-core": "deno run --allow-run --allow-env --allow-read ../run-command.ts .tmp/bastest deno run --allow-run --allow-env --allow-read ../../../run-bastest-core.ts",
+    "bench": {
+      "command": "deno bench --allow-read --allow-write --allow-run --allow-env run.ts",
+      "dependencies": ["build:rust", "prepare:bastest-platform"]
+    }
+  }
+}

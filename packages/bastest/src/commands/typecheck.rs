@@ -1,0 +1,410 @@
+use std::path::{Path, PathBuf};
+
+use owo_colors::OwoColorize;
+
+use super::config::TypecheckChecker;
+
+pub fn run(cwd: &Path, package_root: &Path, checker: TypecheckChecker, files: &[PathBuf]) -> i32 {
+    run_tsgo_with_corsa(cwd, package_root, checker, files)
+}
+
+fn run_tsgo_with_corsa(
+    cwd: &Path,
+    package_root: &Path,
+    checker: TypecheckChecker,
+    files: &[PathBuf],
+) -> i32 {
+    let bin_name = checker.bin_name();
+    let Some(bin) = resolve_tsgo_api_bin(cwd, package_root, bin_name) else {
+        eprintln!("failed to find local {bin_name}. Install @typescript/native-preview.");
+        return 1;
+    };
+    let config_file = cwd.join("tsconfig.json");
+    if !config_file.is_file() {
+        eprintln!("failed to run tsgo typecheck: tsconfig.json was not found");
+        return 1;
+    }
+
+    println!("typecheck tsgo");
+    let assertions = match collect_type_assertions(files) {
+        Ok(assertions) => assertions,
+        Err(error) => {
+            eprintln!("failed to read assert calls: {error}");
+            return 1;
+        }
+    };
+
+    if assertions.is_empty() {
+        return 0;
+    }
+
+    match corsa::runtime::block_on(run_corsa_assert_type(&bin, cwd, &config_file, assertions)) {
+        Ok(failures) if failures.is_empty() => 0,
+        Ok(failures) => {
+            eprintln!();
+            eprintln!("Failed Type Assertions {}", failures.len());
+            eprintln!();
+            for failure in &failures {
+                print_type_assertion_failure(cwd, failure);
+            }
+            eprintln!("{} type assertion errors", failures.len());
+            1
+        }
+        Err(error) => {
+            eprintln!("failed to run tsgo typecheck: {}", error.diagnostic());
+            1
+        }
+    }
+}
+
+async fn run_corsa_assert_type(
+    bin: &Path,
+    cwd: &Path,
+    config_file: &Path,
+    assertions: Vec<TypeAssertion>,
+) -> corsa::Result<Vec<TypeAssertionFailure>> {
+    let session = corsa::api::ProjectSession::spawn(
+        corsa::api::ApiSpawnConfig::new(bin).with_cwd(cwd),
+        config_file.display().to_string(),
+        None,
+    )
+    .await?;
+
+    let mut failures = Vec::new();
+    for assertion in assertions {
+        let Some(actual_type) = session
+            .get_type_at_position(
+                assertion.file.display().to_string(),
+                assertion.expression_position,
+            )
+            .await?
+        else {
+            failures.push(TypeAssertionFailure {
+                file: assertion.file,
+                line: assertion.expression_line,
+                column: assertion.expression_column,
+                expected: assertion.expected,
+                actual: "unknown".to_string(),
+                source_line: assertion.source_line,
+            });
+            continue;
+        };
+
+        let actual = if let Some(text) = actual_type.texts.first() {
+            text.clone()
+        } else {
+            session.type_to_string(actual_type.id, None, None).await?
+        };
+
+        if normalize_type_text(&actual) != normalize_type_text(&assertion.expected) {
+            failures.push(TypeAssertionFailure {
+                file: assertion.file,
+                line: assertion.expression_line,
+                column: assertion.expression_column,
+                expected: assertion.expected,
+                actual,
+                source_line: assertion.source_line,
+            });
+        }
+    }
+    session.close().await?;
+    Ok(failures)
+}
+
+#[derive(Debug)]
+struct TypeAssertion {
+    file: PathBuf,
+    expected: String,
+    expression_position: u32,
+    expression_line: usize,
+    expression_column: usize,
+    source_line: String,
+}
+
+#[derive(Debug)]
+struct TypeAssertionFailure {
+    file: PathBuf,
+    line: usize,
+    column: usize,
+    expected: String,
+    actual: String,
+    source_line: String,
+}
+
+fn collect_type_assertions(files: &[PathBuf]) -> std::io::Result<Vec<TypeAssertion>> {
+    let mut assertions = Vec::new();
+    for file in files {
+        let source = std::fs::read_to_string(file)?;
+        assertions.extend(parse_type_assertions(file, &source));
+    }
+    Ok(assertions)
+}
+
+fn parse_type_assertions(file: &Path, source: &str) -> Vec<TypeAssertion> {
+    let mut assertions = Vec::new();
+    let mut offset = 0;
+
+    while let Some(relative) = source[offset..].find("assert<") {
+        let start = offset + relative;
+        let type_start = start + "assert<".len();
+        let Some(type_end) = find_matching_angle(source, type_start) else {
+            offset = type_start;
+            continue;
+        };
+        let call_start = skip_whitespace(source, type_end + 1);
+        if !source[call_start..].starts_with('(') {
+            offset = type_end + 1;
+            continue;
+        }
+
+        let expression_start = skip_whitespace(source, call_start + 1);
+        let Some(position_index) = first_expression_probe_position(source, expression_start) else {
+            offset = call_start + 1;
+            continue;
+        };
+        let (expression_line, expression_column) = line_column(source, position_index);
+        assertions.push(TypeAssertion {
+            file: file.to_path_buf(),
+            expected: source[type_start..type_end].trim().to_string(),
+            expression_position: utf16_position(source, position_index),
+            expression_line,
+            expression_column,
+            source_line: source_line_at(source, position_index).to_string(),
+        });
+        offset = call_start + 1;
+    }
+
+    assertions
+}
+
+fn find_matching_angle(source: &str, start: usize) -> Option<usize> {
+    let mut depth = 1;
+    let mut index = start;
+    let bytes = source.as_bytes();
+    while index < bytes.len() {
+        match bytes[index] {
+            b'<' => depth += 1,
+            b'>' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+            b'\'' | b'"' | b'`' => {
+                index = skip_string(source, index)?;
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    None
+}
+
+fn skip_string(source: &str, start: usize) -> Option<usize> {
+    let quote = source.as_bytes()[start];
+    let mut index = start + 1;
+    while index < source.len() {
+        let byte = source.as_bytes()[index];
+        if byte == b'\\' {
+            index += 2;
+            continue;
+        }
+        if byte == quote {
+            return Some(index);
+        }
+        index += 1;
+    }
+    None
+}
+
+fn first_expression_probe_position(source: &str, start: usize) -> Option<usize> {
+    let start = skip_whitespace(source, start);
+    source[start..]
+        .char_indices()
+        .find(|(_, char)| is_identifier_start(*char))
+        .map(|(relative, _)| start + relative)
+}
+
+fn skip_whitespace(source: &str, start: usize) -> usize {
+    let mut index = start;
+    while let Some(char) = source[index..].chars().next() {
+        if !char.is_whitespace() {
+            break;
+        }
+        index += char.len_utf8();
+    }
+    index
+}
+
+fn is_identifier_start(char: char) -> bool {
+    char == '_' || char == '$' || char.is_ascii_alphabetic()
+}
+
+fn utf16_position(source: &str, byte_index: usize) -> u32 {
+    source[..byte_index].encode_utf16().count() as u32
+}
+
+fn line_column(source: &str, byte_index: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut column = 1;
+    for char in source[..byte_index].chars() {
+        if char == '\n' {
+            line += 1;
+            column = 1;
+        } else {
+            column += 1;
+        }
+    }
+    (line, column)
+}
+
+fn source_line_at(source: &str, byte_index: usize) -> &str {
+    let start = source[..byte_index]
+        .rfind('\n')
+        .map(|index| index + 1)
+        .unwrap_or(0);
+    let end = source[byte_index..]
+        .find('\n')
+        .map(|index| byte_index + index)
+        .unwrap_or(source.len());
+    source[start..end].trim_end_matches('\r')
+}
+
+fn normalize_type_text(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn print_type_assertion_failure(cwd: &Path, failure: &TypeAssertionFailure) {
+    let file = display_path(cwd, &failure.file);
+    let width = failure.line.to_string().len().max(2);
+    let gutter = " ".repeat(width);
+    let caret_padding = " ".repeat(failure.column.saturating_sub(1));
+
+    eprintln!("{}  {} [ {} ]", red_bold("FAIL"), dim(&file), dim(&file));
+    eprintln!(
+        "{} Argument of type '{}' is not assignable to parameter of type '{}'.",
+        red_bold("TypeCheckError:"),
+        yellow(&failure.actual),
+        green(&failure.expected)
+    );
+    eprintln!("  {} {}", green("Expected:"), failure.expected);
+    eprintln!("  {}   {}", red("Actual:"), failure.actual);
+    eprintln!(
+        " {} {}:{}:{}",
+        cyan(">"),
+        dim(&file),
+        failure.line,
+        failure.column
+    );
+    eprintln!("{} {}", dim(&gutter), dim("|"));
+    eprintln!(
+        "{} {} {}",
+        dim(&format!(
+            "{line:>width$}",
+            line = failure.line,
+            width = width
+        )),
+        dim("|"),
+        failure.source_line
+    );
+    eprintln!(
+        "{} {} {}{}",
+        dim(&gutter),
+        dim("|"),
+        caret_padding,
+        red_bold("^")
+    );
+    eprintln!();
+}
+
+fn display_path(cwd: &Path, file: &Path) -> String {
+    file.strip_prefix(cwd)
+        .unwrap_or(file)
+        .display()
+        .to_string()
+        .replace('\\', "/")
+}
+
+fn color_enabled() -> bool {
+    std::env::var_os("NO_COLOR").is_none()
+}
+
+fn red(value: &str) -> String {
+    if color_enabled() {
+        value.red().to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn red_bold(value: &str) -> String {
+    if color_enabled() {
+        value.red().bold().to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn green(value: &str) -> String {
+    if color_enabled() {
+        value.truecolor(22, 163, 74).to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn yellow(value: &str) -> String {
+    if color_enabled() {
+        value.yellow().to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn cyan(value: &str) -> String {
+    if color_enabled() {
+        value.cyan().bold().to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn dim(value: &str) -> String {
+    if color_enabled() {
+        value.dimmed().to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn resolve_bin(cwd: &Path, package_root: &Path, name: &str) -> Option<PathBuf> {
+    for start in [cwd, package_root] {
+        let mut current = start.to_path_buf();
+        loop {
+            if let Some(bin) = bin_in(&current, name) {
+                return Some(bin);
+            }
+            if !current.pop() {
+                break;
+            }
+        }
+    }
+    None
+}
+
+fn resolve_tsgo_api_bin(cwd: &Path, package_root: &Path, bin_name: &str) -> Option<PathBuf> {
+    resolve_bin(cwd, package_root, bin_name)
+}
+
+fn bin_in(dir: &Path, name: &str) -> Option<PathBuf> {
+    let bin_dir = dir.join("node_modules").join(".bin");
+    let candidates = if cfg!(windows) {
+        vec![format!("{name}.cmd"), name.to_string()]
+    } else {
+        vec![name.to_string()]
+    };
+    candidates
+        .into_iter()
+        .map(|candidate| bin_dir.join(candidate))
+        .find(|candidate| candidate.is_file())
+}

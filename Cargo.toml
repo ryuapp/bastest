@@ -1,0 +1,20 @@
+[workspace]
+members = ["packages/bastest"]
+resolver = "2"
+
+[workspace.dependencies]
+bpaf = { version = "=0.9.26", features = ["derive"] }
+corsa = "=0.47.1"
+jsonc-parser = { version = "=0.32.4", features = ["serde"] }
+mimalloc = "=0.1.52"
+owo-colors = "=4.3.0"
+oxc_allocator = "=0.135.0"
+oxc_ast = "=0.135.0"
+oxc_ast_visit = "=0.135.0"
+oxc_parser = "=0.135.0"
+oxc_span = "=0.135.0"
+rolldown = "=1.1.1"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+tokio = { version = "=1.52.3", features = ["rt-multi-thread"] }
+url = "=2.5.8"

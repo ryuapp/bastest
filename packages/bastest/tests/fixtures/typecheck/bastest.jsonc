@@ -1,0 +1,6 @@
+{
+  "typecheck": {
+    "enabled": true,
+    "checker": "tsgo"
+  }
+}

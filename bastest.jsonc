@@ -1,0 +1,13 @@
+{
+  "exclude": [
+    "node_modules",
+    "dist",
+    "benchmarks",
+    "packages/bastest/tests/fixtures"
+  ],
+  "typecheck": {
+    "enabled": false,
+    "checker": "tsgo"
+  },
+  "watch": false
+}
