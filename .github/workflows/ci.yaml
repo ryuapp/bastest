@@ -37,6 +37,11 @@ jobs:
             registry.npmjs.org:443
             static.crates.io:443
             static.rust-lang.org:443
+            archive.ubuntu.com:443
+            azure.archive.ubuntu.com:80
+            azure.archive.ubuntu.com:443
+            esm.ubuntu.com:443
+            security.ubuntu.com:443
             dl.deno.com:443
             deno.com:443
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -46,6 +51,18 @@ jobs:
         with:
           target: ${{ matrix.target }}
       - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+      - name: Install musl tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y musl-tools
+      - name: Configure musl compiler (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo 'CC_x86_64_unknown_linux_musl=musl-gcc' >> $GITHUB_ENV
+          echo 'CC_aarch64_unknown_linux_musl=musl-gcc' >> $GITHUB_ENV
+          echo 'CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc' >> $GITHUB_ENV
+          echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc' >> $GITHUB_ENV
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
       - name: Test
