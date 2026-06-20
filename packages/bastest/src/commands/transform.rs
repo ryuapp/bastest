@@ -264,7 +264,7 @@ fn apply_replacements(source: &str, replacements: &mut Vec<Replacement>) -> Stri
     output
 }
 
-fn runtime_module_specifier(package_root: &Path, output_dir: &Path) -> Result<String, String> {
+fn runtime_module_specifier(package_root: &Path, _output_dir: &Path) -> Result<String, String> {
     let dist = package_root.join("dist");
     let source = package_root.join("src");
     let file = if dist.is_dir() {
@@ -272,40 +272,13 @@ fn runtime_module_specifier(package_root: &Path, output_dir: &Path) -> Result<St
     } else {
         source.join("mod.ts")
     };
-    let relative = relative_path(output_dir, &file).ok_or_else(|| {
+    let specifier = url::Url::from_file_path(&file).map_err(|_| {
         format!(
-            "failed to create relative import from {} to {}",
-            output_dir.display(),
+            "failed to create file URL for runtime module {}",
             file.display()
         )
     })?;
-    let mut specifier = relative.to_string_lossy().replace('\\', "/");
-    if !specifier.starts_with('.') {
-        specifier = format!("./{specifier}");
-    }
-    Ok(specifier)
-}
-
-fn relative_path(from_dir: &Path, to_file: &Path) -> Option<PathBuf> {
-    let from = from_dir.components().collect::<Vec<_>>();
-    let to = to_file.components().collect::<Vec<_>>();
-    if from.first() != to.first() {
-        return None;
-    }
-
-    let mut shared = 0;
-    while shared < from.len() && shared < to.len() && from[shared] == to[shared] {
-        shared += 1;
-    }
-
-    let mut output = PathBuf::new();
-    for _ in shared..from.len() {
-        output.push("..");
-    }
-    for component in &to[shared..] {
-        output.push(component.as_os_str());
-    }
-    Some(output)
+    Ok(specifier.to_string())
 }
 
 fn make_temp_dir() -> Result<PathBuf, String> {
