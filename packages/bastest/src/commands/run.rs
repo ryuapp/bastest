@@ -44,6 +44,13 @@ pub fn execute(options: RunOptions) -> i32 {
         }
     };
     let node = env::var_os("BASTEST_RUNTIME_PATH").unwrap_or_else(|| OsString::from("node"));
+    let cli_path = match env::current_exe() {
+        Ok(cli_path) => cli_path,
+        Err(error) => {
+            eprintln!("failed to resolve bastest executable path: {error}");
+            return 1;
+        }
+    };
     let config = match config::load(&options.cwd) {
         Ok(config) => config,
         Err(code) => return code,
@@ -97,6 +104,7 @@ pub fn execute(options: RunOptions) -> i32 {
         package_root: options.package_root,
         runner,
         node,
+        cli_path,
         filter: options.filter.or(config.filter),
         concurrency: options.concurrency.or(config.concurrency),
         fail_fast: options.fail_fast || config.fail_fast.unwrap_or(false),
@@ -215,6 +223,7 @@ struct RunFilesOptions {
     package_root: PathBuf,
     runner: PathBuf,
     node: OsString,
+    cli_path: PathBuf,
     filter: Option<String>,
     concurrency: Option<usize>,
     fail_fast: bool,
@@ -240,6 +249,7 @@ fn run_files(options: RunFilesOptions) -> Result<Vec<FileResult>, i32> {
             runner: options.runner.clone(),
             cwd: options.cwd.clone(),
             package_root: options.package_root.clone(),
+            cli_path: options.cli_path.clone(),
             filter: options.filter.clone(),
         })?;
         let queue = Arc::clone(&queue);
@@ -323,6 +333,7 @@ struct NodeWorkerConfig {
     runner: PathBuf,
     cwd: PathBuf,
     package_root: PathBuf,
+    cli_path: PathBuf,
     filter: Option<String>,
 }
 
@@ -365,6 +376,7 @@ impl NodeWorker {
             .arg("--worker")
             .current_dir(&config.package_root)
             .env("NO_COLOR", "1")
+            .env("BASTEST_CLI_PATH", &config.cli_path)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())

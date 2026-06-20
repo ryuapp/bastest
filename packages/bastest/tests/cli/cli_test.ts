@@ -12,14 +12,7 @@ import path from "node:path";
 import { assert, test } from "bastest";
 
 const packageRoot = process.cwd();
-const cli = path.resolve(
-  packageRoot,
-  "..",
-  "..",
-  "target",
-  "debug",
-  process.platform === "win32" ? "bastest.exe" : "bastest",
-);
+const cli = requireEnv("BASTEST_CLI_PATH");
 const fixtures = path.join(packageRoot, "tests", "fixtures");
 
 test("CLI runs explicit test files", async () => {
@@ -502,6 +495,14 @@ function runCliIn(
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
   };
+}
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is not set`);
+  }
+  return value;
 }
 
 async function readFixture(...parts: string[]): Promise<string> {
