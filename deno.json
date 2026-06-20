@@ -23,7 +23,7 @@
     "bench:in-source-test": "deno task --cwd benchmarks/in-source-test bench",
     "clean": "deno task --cwd packages/bastest clean"
   },
-  "nodeModulesDir": "manual",
+  "nodeModulesDir": "auto",
   "catalog": {
     "@typescript/native-preview": "7.0.0-dev.20260614.1",
     "@types/node": "25.9.3",
