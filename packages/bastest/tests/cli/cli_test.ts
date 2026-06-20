@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import {
   access,
   mkdir,
@@ -132,11 +133,11 @@ test("CLI fails when bastest.jsonc is not found", async () => {
 
     const result = runCliIn(dir);
     assert(result.status === 2);
-    assert(
-      result.stderr.includes(
-        `could not find \`bastest.jsonc\` in \`${dir}\` or any parent directory`,
-      ),
-    );
+    const missingConfigPath = result.stderr.match(
+      /could not find `bastest\.jsonc` in `([^`]+)` or any parent directory/,
+    )?.[1];
+    assert(missingConfigPath);
+    assert(samePath(missingConfigPath, dir));
     assert(!/fallback source \.\.\. ok/.test(result.stdout));
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -505,6 +506,10 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function samePath(left: string, right: string): boolean {
+  return normalizePath(realpathSync(left)) === normalizePath(realpathSync(right));
+}
+
 async function readFixture(...parts: string[]): Promise<string> {
   return normalizeNewlines(
     await readFile(path.join(fixtures, ...parts), "utf8"),
@@ -518,6 +523,10 @@ function normalizeLog(value: string): string {
     .replace(/(?<![\w.])\d+(?:\.\d+)?s/g, "<duration>")
     .replace(/^[ \t]+at .*$/gm, "    <stack>")
     .trimEnd();
+}
+
+function normalizePath(value: string): string {
+  return value.replaceAll("\\", "/");
 }
 
 function normalizeNewlines(value: string): string {
