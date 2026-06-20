@@ -12,6 +12,8 @@ jobs:
   ci:
     name: CI (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
     strategy:
       fail-fast: true
       matrix:
@@ -66,9 +68,9 @@ jobs:
       - name: Build JavaScript
         run: deno task build
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release
       - name: Test
-        run: deno task test --target ${{ matrix.target }}
+        run: deno task test
 
   lint:
     name: Lint
