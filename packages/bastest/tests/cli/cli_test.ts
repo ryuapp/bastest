@@ -507,7 +507,8 @@ function requireEnv(name: string): string {
 }
 
 function samePath(left: string, right: string): boolean {
-  return normalizePath(realpathSync(left)) === normalizePath(realpathSync(right));
+  return normalizePath(realpathSync(left)) ===
+    normalizePath(realpathSync(right));
 }
 
 async function readFixture(...parts: string[]): Promise<string> {
