@@ -298,6 +298,109 @@ test("CLI uses minimal output when agent config is enabled", async () => {
   }
 });
 
+test("CLI wraps long power assert values", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "bastest-cli-"));
+  try {
+    const file = path.join(dir, "sample_test.ts");
+    await writeFile(
+      file,
+      [
+        'import { test } from "bastest";',
+        'import { assert } from "bastest";',
+        'test("long string value", () => {',
+        '  const actual = "x".repeat(140);',
+        '  const expected = "y";',
+        "  assert(actual === expected);",
+        "});",
+        'test("long expected value", () => {',
+        '  const actual = "short";',
+        '  const expected = "y".repeat(140);',
+        "  assert(actual === expected);",
+        "});",
+        'test("long object value", () => {',
+        '  const actual = { message: "z".repeat(140) };',
+        '  const expected = { message: "ok" };',
+        "  assert(actual.message === expected.message);",
+        "});",
+        'test("long unicode value", () => {',
+        '  const actual = "長".repeat(140);',
+        '  const expected = "短";',
+        "  assert(actual === expected);",
+        "});",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = runCli(file);
+    assert(result.status === 1);
+    assertWrappedCaptureValue(result.stdout, "x");
+    assertWrappedCaptureValue(result.stdout, "y");
+    assertWrappedCaptureValue(result.stdout, "z");
+    assertWrappedCaptureValue(result.stdout, "長");
+    assertObjectValueContinuationAligned(result.stdout, "z");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("CLI keeps closing quote on exact-width wrapped object values", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "bastest-cli-"));
+  try {
+    const file = path.join(dir, "sample_test.ts");
+    await writeFile(
+      file,
+      [
+        'import { test } from "bastest";',
+        'import { assert } from "bastest";',
+        'test("exact width object value", () => {',
+        '  const actual = { message: "z".repeat(34) };',
+        '  const expected = { message: "ok" };',
+        "  assert(actual.message === expected.message);",
+        "});",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = runCliWithEnv(packageRoot, { COLUMNS: "60" }, file);
+    assert(result.status === 1);
+    assert(!/^\s+"$/m.test(result.stdout), result.stdout);
+    assert(
+      result.stdout.includes(
+        `"message": "${"z".repeat(34)}"`,
+      ),
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("CLI truncates very long power assert values", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "bastest-cli-"));
+  try {
+    const file = path.join(dir, "sample_test.ts");
+    await writeFile(
+      file,
+      [
+        'import { test } from "bastest";',
+        'import { assert } from "bastest";',
+        'test("very long value", () => {',
+        '  const actual = { message: "a".repeat(500) };',
+        '  const expected = { message: "ok" };',
+        "  assert(actual.message === expected.message);",
+        "});",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = runCliWithEnv(packageRoot, { COLUMNS: "60" }, file);
+    assert(result.status === 1);
+    assert(result.stdout.includes('..."'), result.stdout);
+    assert(!result.stdout.includes("a".repeat(200)), result.stdout);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("CLI enables minimal output from agent env", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "bastest-cli-"));
   try {
@@ -509,6 +612,38 @@ function requireEnv(name: string): string {
 function samePath(left: string, right: string): boolean {
   return normalizePath(realpathSync(left)) ===
     normalizePath(realpathSync(right));
+}
+
+function assertWrappedCaptureValue(output: string, character: string): void {
+  assert(!output.includes(character.repeat(100)), output);
+  for (const line of output.split(/\r?\n/)) {
+    if (line.includes(character.repeat(16))) {
+      assert(line.length <= 100, output);
+      assert(/^\s+/.test(line), output);
+    }
+  }
+}
+
+function assertObjectValueContinuationAligned(
+  output: string,
+  character: string,
+): void {
+  const lines = output.split(/\r?\n/);
+  const firstValueLine = lines.find((line) =>
+    line.includes(`"message": "${character.repeat(16)}`)
+  );
+  assert(firstValueLine, output);
+
+  const valueColumn = firstValueLine.indexOf(character);
+  const start = lines.indexOf(firstValueLine);
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() === "}") {
+      break;
+    }
+    if (line.trimStart().startsWith(character.repeat(16))) {
+      assert(line.indexOf(character) === valueColumn, output);
+    }
+  }
 }
 
 async function readFixture(...parts: string[]): Promise<string> {
