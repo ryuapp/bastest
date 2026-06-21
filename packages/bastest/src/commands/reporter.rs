@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 
+const MAX_CAPTURE_VALUE_LINES: usize = 6;
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileResult {
@@ -311,14 +313,134 @@ fn print_power_assert(expression: &str, captures: Option<&[AssertionCapture]>, s
     for capture in sorted.into_iter().rev() {
         let column = offset + capture.start;
         let value = format_json_value(&capture.value, Some("assert"));
-        let mut lines = value.lines();
-        if let Some(first) = lines.next() {
-            println!("{}{}{}", padding, " ".repeat(column), first);
-        }
-        for line in lines {
+        let available = terminal_width().saturating_sub(spaces + column).max(16);
+        for line in value.lines().flat_map(|line| wrap_line(line, available)) {
             println!("{}{}{}", padding, " ".repeat(column), line);
         }
     }
+}
+
+fn wrap_line(line: &str, width: usize) -> Vec<String> {
+    if line.chars().count() <= width {
+        return vec![line.to_string()];
+    }
+    if is_json_key_value_string_line(line) {
+        return wrap_json_key_value_string_line(line, width);
+    }
+    if is_json_string_line(line) {
+        return wrap_json_string_line(line, width);
+    }
+
+    let continuation = continuation_prefix(line);
+    let continuation_width = continuation.chars().count();
+    let continuation_content_width = width.saturating_sub(continuation_width).max(16);
+    let mut wrapped = Vec::new();
+    let mut current = String::new();
+    let mut current_width = width;
+    for character in line.chars() {
+        current.push(character);
+        if current.chars().count() >= current_width {
+            wrapped.push(current);
+            current = continuation.clone();
+            current_width = continuation_width + continuation_content_width;
+        }
+    }
+    if current.chars().count() > continuation_width {
+        wrapped.push(current);
+    }
+    truncate_wrapped_lines(&mut wrapped, continuation, false);
+    wrapped
+}
+
+fn wrap_json_key_value_string_line(line: &str, width: usize) -> Vec<String> {
+    let value_start = line.find(": \"").unwrap_or(0) + ": \"".len();
+    wrap_quoted_content(line, value_start, width)
+}
+
+fn wrap_json_string_line(line: &str, width: usize) -> Vec<String> {
+    let value_start = line.find('"').unwrap_or(0) + 1;
+    wrap_quoted_content(line, value_start, width)
+}
+
+fn wrap_quoted_content(line: &str, value_start: usize, width: usize) -> Vec<String> {
+    let suffix = 1;
+    let content = &line[value_start..line.len() - suffix];
+    let continuation = " ".repeat(value_start);
+    let first_width = width.saturating_sub(value_start + suffix).max(16);
+    let continuation_width = width
+        .saturating_sub(continuation.chars().count() + suffix)
+        .max(16);
+
+    let mut chunks = Vec::new();
+    let mut current = String::new();
+    let mut current_width = first_width;
+    for character in content.chars() {
+        current.push(character);
+        if current.chars().count() >= current_width {
+            chunks.push(current);
+            current = String::new();
+            current_width = continuation_width;
+        }
+    }
+    if !current.is_empty() {
+        chunks.push(current);
+    }
+    if chunks.len() > MAX_CAPTURE_VALUE_LINES {
+        chunks.truncate(MAX_CAPTURE_VALUE_LINES - 1);
+        chunks.push("...".to_string());
+    }
+
+    let last_index = chunks.len().saturating_sub(1);
+    chunks
+        .into_iter()
+        .enumerate()
+        .map(|(index, chunk)| {
+            if index == 0 && index == last_index {
+                format!("{}{}\"", &line[..value_start], chunk)
+            } else if index == 0 {
+                format!("{}{}", &line[..value_start], chunk)
+            } else if index == last_index {
+                format!("{continuation}{chunk}\"")
+            } else {
+                format!("{continuation}{chunk}")
+            }
+        })
+        .collect()
+}
+
+fn truncate_wrapped_lines(lines: &mut Vec<String>, continuation: String, quoted: bool) {
+    if lines.len() <= MAX_CAPTURE_VALUE_LINES {
+        return;
+    }
+    lines.truncate(MAX_CAPTURE_VALUE_LINES - 1);
+    lines.push(format!(
+        "{}...{}",
+        continuation,
+        if quoted { "\"" } else { "" }
+    ));
+}
+
+fn is_json_key_value_string_line(line: &str) -> bool {
+    line.contains(": \"") && line.trim_end().ends_with('"')
+}
+
+fn is_json_string_line(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() > 2
+}
+
+fn continuation_prefix(line: &str) -> String {
+    let Some(value_start) = line.find(": \"").map(|index| index + ": \"".len()) else {
+        return String::new();
+    };
+    " ".repeat(value_start)
+}
+
+fn terminal_width() -> usize {
+    std::env::var("COLUMNS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(100)
 }
 
 fn print_value_block(label: &str, value: Option<&Value>, spaces: usize, operator: Option<&str>) {
