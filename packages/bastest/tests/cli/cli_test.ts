@@ -1,13 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
-import {
-  access,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { assert, test } from "bastest";
@@ -421,26 +414,23 @@ test("CLI enables minimal output from agent env", async () => {
     assert(!result.stdout.includes("[bastest.ai]"));
     assert(result.stdout.includes("generated fail"));
     assert(!result.stdout.includes("generated pass"));
-    assert(result.stdout.includes("Report Dir: "));
-    assert(result.stdout.includes(".bastest/reports/latest"));
+    assert(result.stdout.includes("Report: "));
+    assert(result.stdout.includes(".bastest/reports/latest/result.json"));
     assert(
       result.stdout.indexOf("fail |") < result.stdout.indexOf("generated fail"),
     );
     assert(
-      result.stdout.indexOf("Report Dir: ") <
+      result.stdout.indexOf("Report: ") <
         result.stdout.indexOf("generated fail"),
     );
-    await access(
-      path.join(dir, ".bastest", "reports", "latest", "summary.json"),
-    );
-    const failures = JSON.parse(
+    const report = JSON.parse(
       await readFile(
-        path.join(dir, ".bastest", "reports", "latest", "failures.json"),
+        path.join(dir, ".bastest", "reports", "latest", "result.json"),
         "utf8",
       ),
     );
-    assert(failures.summary.failed === 1);
-    assert(failures.failures.length === 1);
+    assert(report.summary.failed === 1);
+    assert(report.failures.length === 1);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -489,7 +479,7 @@ test("CLI does not print report path for successful agent runs", async () => {
 
     const result = runCliIn(dir, "--agent");
     assert(result.status === 0);
-    assert(!result.stdout.includes("Report Dir: "));
+    assert(!result.stdout.includes("Report: "));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
