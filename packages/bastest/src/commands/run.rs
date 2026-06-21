@@ -121,8 +121,8 @@ pub fn execute(options: RunOptions) -> i32 {
         reporter::report_summary(&results)
     };
     if agent && failed > 0 {
-        match write_agent_report(&options.cwd, &summary, &results) {
-            Ok(report_dir) => println!("Report Dir: {}", display_path(&report_dir)),
+        match write_agent_result(&options.cwd, &summary, &results) {
+            Ok(result_path) => println!("Report: {}", display_path(&result_path)),
             Err(error) => eprintln!("failed to write bastest report: {error}"),
         }
     }
@@ -155,7 +155,7 @@ struct AgentReport<'a> {
     failures: Vec<&'a FileResult>,
 }
 
-fn write_agent_report(
+fn write_agent_result(
     cwd: &Path,
     summary: &reporter::Summary,
     results: &[FileResult],
@@ -170,9 +170,9 @@ fn write_agent_report(
         .filter(|file| file.load_error.is_some() || has_failed_test(&file.tests))
         .collect::<Vec<_>>();
 
-    write_json(&report_dir.join("summary.json"), summary)?;
+    let result_path = report_dir.join("result.json");
     write_json(
-        &report_dir.join("failures.json"),
+        &result_path,
         &AgentReport {
             summary,
             failures: failures.clone(),
@@ -183,7 +183,7 @@ fn write_agent_report(
         write_json(&files_dir.join(report_file_name(&file.file)), file)?;
     }
 
-    Ok(report_dir)
+    Ok(result_path)
 }
 
 fn display_path(path: &Path) -> String {
