@@ -13,11 +13,6 @@ tests/fixtures/report/basic_test.ts
            }
            "alpha"
 
-      actual
-        false
-      expected
-        true
-
     <stack>
 
 fail | 1 passed | 1 failed | 1 ignored (<duration>)

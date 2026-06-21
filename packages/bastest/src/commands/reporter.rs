@@ -260,7 +260,7 @@ fn print_error(error: &SerializedError, spaces: usize) {
         print_power_assert(expression, error.captures.as_deref(), spaces);
     }
 
-    if error.actual.is_some() || error.expected.is_some() {
+    if error.expression.is_none() && (error.actual.is_some() || error.expected.is_some()) {
         println!();
         print_value_block(
             "actual",
