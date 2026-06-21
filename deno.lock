@@ -7,6 +7,7 @@
     "npm:@typescript/native-preview@7.0.0-dev.20260614.1": "7.0.0-dev.20260614.1",
     "npm:dax@0.48.3": "0.48.3",
     "npm:npm@11.17.0": "11.17.0",
+    "npm:pkg-pr-new@0.0.75": "0.0.75",
     "npm:tsdown@0.22.2": "0.22.2_unrun@0.3.1_@typescript+native-preview@7.0.0-dev.20260614.1",
     "npm:unrun@0.3.1": "0.3.1",
     "npm:vitest@4.1.8": "4.1.8_@types+node@25.9.3"
@@ -595,6 +596,10 @@
     "picomatch@4.0.4": {
       "integrity": "sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A=="
     },
+    "pkg-pr-new@0.0.75": {
+      "integrity": "sha512-u9mdErTewKSMsr+ceCt8VcNuNP0ro5AXiPXhUVApuEyqr2Zlvt+DdCFBcm+yGWN8mhOdZJ27meIDbnoZgfzpOw==",
+      "bin": true
+    },
     "postcss@8.5.15": {
       "integrity": "sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==",
       "dependencies": [
@@ -822,6 +827,7 @@
     "dependencies": [
       "npm:dax@0.48.3",
       "npm:npm@11.17.0",
+      "npm:pkg-pr-new@0.0.75",
       "npm:vitest@4.1.8"
     ],
     "members": {
