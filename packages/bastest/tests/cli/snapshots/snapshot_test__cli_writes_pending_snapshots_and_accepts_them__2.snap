@@ -1,0 +1,8 @@
+---
+source: tests/cli/snapshot_test.ts
+---
+status: 0
+stdout:
+  accepted 3 snapshots
+stderr:
+  <empty>

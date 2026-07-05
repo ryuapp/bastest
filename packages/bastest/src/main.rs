@@ -41,6 +41,7 @@ fn main() {
             files: cli.files,
         }),
         cli::CommandKind::Clean => commands::clean::execute(&project_root),
+        cli::CommandKind::Snapshot => commands::snapshot::execute(&project_root, &cli.files),
         cli::CommandKind::Watch => commands::watch::execute(),
     };
 

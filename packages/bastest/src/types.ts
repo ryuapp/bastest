@@ -5,6 +5,7 @@ export type TestStatus = "passed" | "failed" | "ignored";
 export interface RegisteredTest {
   id: number;
   name: string;
+  nameOccurrence: number;
   fn: TestFunction;
   ignore: boolean;
   only: boolean;

@@ -1,0 +1,15 @@
+---
+source: tests/cli/discovery_test.ts
+expression: [
+    `status: ${result.status}`,
+    "stdout:",
+    indentBlock(normalizeLog(result.stdout)),
+    "stderr:",
+    indentBlock(normalizeLog(result.stderr)),
+  ].join("\n")
+---
+status: 0
+stdout:
+  No test files found.
+stderr:
+  <empty>

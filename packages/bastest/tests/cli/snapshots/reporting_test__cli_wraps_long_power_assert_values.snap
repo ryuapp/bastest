@@ -1,0 +1,58 @@
+---
+source: packages/bastest/tests/cli/reporting_test.ts
+---
+status: 1
+stdout:
+  
+  tests/fixtures/cli/reporting/long-values_test.ts
+    long string value ... fail (<duration>)
+      AssertionError: Expected value to be truthy
+  
+      assert(actual === expected)
+             |          |        
+                        "y"
+             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+              xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  
+      <stack>
+    long expected value ... fail (<duration>)
+      AssertionError: Expected value to be truthy
+  
+      assert(actual === expected)
+             |          |        
+                        "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+                         yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+             "short"
+  
+      <stack>
+    long object value ... fail (<duration>)
+      AssertionError: Expected value to be truthy
+  
+      assert(actual.message === expected.message)
+             |                  |                
+                                {
+                                  "message": "ok"
+                                }
+                                "ok"
+             {
+               "message": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+                           zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+             }
+             "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+              zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+  
+      <stack>
+    long unicode value ... fail (<duration>)
+      AssertionError: Expected value to be truthy
+  
+      assert(actual === expected)
+             |          |        
+                        "短"
+             "長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長
+              長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長長"
+  
+      <stack>
+  
+  fail | 0 passed | 4 failed | 0 ignored (<duration>)
+stderr:
+  <empty>

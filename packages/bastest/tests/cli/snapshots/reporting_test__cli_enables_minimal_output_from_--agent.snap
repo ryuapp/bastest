@@ -1,0 +1,18 @@
+---
+source: packages/bastest/tests/cli/reporting_test.ts
+---
+status: 1
+stdout:
+  
+  fail | 1 passed | 1 failed | 0 ignored (<duration>)
+  Report: tests/fixtures/cli/reporting/agent-flag/.bastest/reports/latest/result.json
+  
+  sample_test.ts (<duration>)
+    generated fail ... fail (<duration>)
+      AssertionError: Expected value to be truthy
+  
+      assert(false)
+  
+      <stack>
+stderr:
+  <empty>

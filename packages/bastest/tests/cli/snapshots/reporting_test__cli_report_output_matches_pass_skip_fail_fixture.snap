@@ -1,0 +1,32 @@
+---
+source: tests/cli/reporting_test.ts
+expression: [
+    `status: ${result.status}`,
+    "stdout:",
+    indentBlock(normalizeLog(result.stdout)),
+    "stderr:",
+    indentBlock(normalizeLog(result.stderr)),
+  ].join("\n")
+---
+status: 1
+stdout:
+  
+  tests/fixtures/report/basic_test.ts
+    fixture pass ... ok (<duration>)
+    fixture skip ... skip (<duration>)
+    fixture fail ... fail (<duration>)
+      AssertionError: Expected value to be truthy
+  
+      assert(user.name === expected)
+             |             |        
+                           "beta"
+             {
+               "name": "alpha"
+             }
+             "alpha"
+  
+      <stack>
+  
+  fail | 1 passed | 1 failed | 1 ignored (<duration>)
+stderr:
+  <empty>

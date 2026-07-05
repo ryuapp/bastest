@@ -1,0 +1,16 @@
+---
+source: tests/cli/reporting_test.ts
+expression: [
+    `status: ${result.status}`,
+    "stdout:",
+    indentBlock(normalizeLog(result.stdout)),
+    "stderr:",
+    indentBlock(normalizeLog(result.stderr)),
+  ].join("\n")
+---
+status: 0
+stdout:
+  
+  ok | 1 passed | 0 failed | 0 ignored (<duration>)
+stderr:
+  <empty>

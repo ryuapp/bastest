@@ -1,0 +1,36 @@
+---
+source: packages/bastest/tests/cli/reporting_test.ts
+---
+status: 1
+stdout:
+  
+  tests/fixtures/cli/reporting/very-long-value_test.ts
+    very long value ... fail (<duration>)
+      AssertionError: Expected value to be truthy
+  
+      assert(actual.message === expected.message)
+             |                  |                
+                                {
+                                  "message": "ok"
+                                }
+                                "ok"
+             {
+               "message": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                           aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                           aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                           aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                           aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                           ..."
+             }
+             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+              aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+              aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+              aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+              aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+              ..."
+  
+      <stack>
+  
+  fail | 0 passed | 1 failed | 0 ignored (<duration>)
+stderr:
+  <empty>

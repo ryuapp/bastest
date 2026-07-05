@@ -1,0 +1,17 @@
+---
+source: packages/bastest/tests/cli/run_test.ts
+---
+status: 1
+stdout:
+  
+  tests/fixtures/cli/run/fail/sample_test.ts
+    generated fail ... fail (<duration>)
+      AssertionError: Expected value to be truthy
+  
+      assert(1 === 2)
+  
+      <stack>
+  
+  fail | 0 passed | 1 failed | 0 ignored (<duration>)
+stderr:
+  <empty>

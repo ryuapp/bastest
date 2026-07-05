@@ -1,0 +1,12 @@
+---
+source: packages/bastest/tests/cli/run_test.ts
+---
+status: 0
+stdout:
+  
+  tests/fixtures/cli/run/pass/sample_test.ts
+    generated pass ... ok (<duration>)
+  
+  ok | 1 passed | 0 failed | 0 ignored (<duration>)
+stderr:
+  <empty>

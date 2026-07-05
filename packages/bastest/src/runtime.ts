@@ -21,12 +21,16 @@ export interface Registry {
 
 export function createRegistry(): Registry {
   const tests: RegisteredTest[] = [];
+  const nameOccurrences = new Map<string, number>();
   let nextId = 0;
 
   const register = (options: TestOptions) => {
+    const nameOccurrence = (nameOccurrences.get(options.name) ?? 0) + 1;
+    nameOccurrences.set(options.name, nameOccurrence);
     tests.push({
       id: nextId++,
       name: options.name,
+      nameOccurrence,
       fn: options.fn,
       ignore: options.ignore === true,
       only: options.only === true,
@@ -84,6 +88,13 @@ async function runTest(entry: RegisteredTest): Promise<TestResult> {
 
   const steps: StepResult[] = [];
   const started = performance.now();
+  globalThis.__bastest_snapshot = {
+    cwd: globalThis.__bastest_current_cwd,
+    file: globalThis.__bastest_current_file ?? "",
+    testName: entry.name,
+    testNameOccurrence: entry.nameOccurrence,
+    index: 0,
+  };
   try {
     await entry.fn(createContext(entry.name, steps));
     return {
@@ -100,6 +111,8 @@ async function runTest(entry: RegisteredTest): Promise<TestResult> {
       error: serializeError(error),
       steps,
     };
+  } finally {
+    globalThis.__bastest_snapshot = undefined;
   }
 }
 

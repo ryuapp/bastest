@@ -14,6 +14,8 @@ export function parseArgs(args: string[]): RunnerOptions {
     const arg = args[index];
     if (arg === "--worker") {
       options.worker = true;
+    } else if (arg === "--cwd") {
+      options.cwd = readValue(args, ++index, "--cwd");
     } else if (arg === "--file") {
       options.file = readValue(args, ++index, "--file");
     } else if (arg === "--bundle-file") {
@@ -41,39 +43,48 @@ export function readValue(args: string[], index: number, flag: string): string {
 export async function runFile(options: RunFileOptions): Promise<FileResult> {
   const registry = createRegistry();
   globalThis.__bastest_api = registry.api;
+  globalThis.__bastest_current_file = options.file;
+  globalThis.__bastest_current_cwd = options.cwd;
 
   const started = performance.now();
   try {
     await import(options.bundleFile);
   } catch (error) {
+    globalThis.__bastest_api = undefined;
+    globalThis.__bastest_current_file = undefined;
+    globalThis.__bastest_current_cwd = undefined;
     return {
       file: options.file,
       durationMs: elapsed(started),
       tests: [],
       loadError: serializeError(error),
     };
-  } finally {
-    globalThis.__bastest_api = undefined;
   }
 
   const filter = options.filter ? new RegExp(options.filter) : undefined;
-  const tests = await registry.runAll({
-    filter,
-    onTest: options.stream
-      ? (test) => {
-        console.log(
-          `${EVENT_PREFIX}${
-            JSON.stringify({ type: "test", file: options.file, test })
-          }`,
-        );
-      }
-      : undefined,
-  });
-  return {
-    file: options.file,
-    durationMs: elapsed(started),
-    tests,
-  };
+  try {
+    const tests = await registry.runAll({
+      filter,
+      onTest: options.stream
+        ? (test) => {
+          console.log(
+            `${EVENT_PREFIX}${
+              JSON.stringify({ type: "test", file: options.file, test })
+            }`,
+          );
+        }
+        : undefined,
+    });
+    return {
+      file: options.file,
+      durationMs: elapsed(started),
+      tests,
+    };
+  } finally {
+    globalThis.__bastest_api = undefined;
+    globalThis.__bastest_current_file = undefined;
+    globalThis.__bastest_current_cwd = undefined;
+  }
 }
 
 function elapsed(started: number): number {
