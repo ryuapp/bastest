@@ -1,4 +1,4 @@
-import { readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "bastest";
 import {
@@ -26,6 +26,15 @@ const snapshotSource = [
 ].join("\n");
 
 const changedSnapshotSource = snapshotSource.replace("ok: true", "ok: false");
+
+const crlfSnapshotSource = [
+  'import { assertSnapshot, test } from "bastest";',
+  "",
+  'test("records value", () => {',
+  '  assertSnapshot({ name: "bastest", ok: true });',
+  "});",
+  "",
+].join("\n");
 
 test("CLI writes pending snapshots and accepts them", async () => {
   const dir = path.join(cliFixtures, "snapshot", "pending");
@@ -123,6 +132,44 @@ test("CLI does not write pending snapshots in CI", async () => {
   } finally {
     await rm(path.join(dir, ".bastest"), { recursive: true, force: true });
     await rm(path.join(dir, "src", "snapshots"), {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test("CLI reads snapshots with CRLF frontmatter", async () => {
+  const dir = path.join(cliFixtures, "snapshot", "pending");
+  const source = path.join(dir, "src", "snapshot_test.ts");
+  const snapshotsDir = path.join(dir, "src", "snapshots");
+  try {
+    await writeFile(source, crlfSnapshotSource, "utf8");
+    await rm(path.join(dir, ".bastest"), { recursive: true, force: true });
+    await rm(snapshotsDir, { recursive: true, force: true });
+    await mkdir(snapshotsDir, { recursive: true });
+    await writeFile(
+      path.join(snapshotsDir, "snapshot_test__records_value.snap"),
+      [
+        "---",
+        "source: src/snapshot_test.ts",
+        'expression: { name: "bastest", ok: true }',
+        "---",
+        "{",
+        '  "name": "bastest",',
+        '  "ok": true',
+        "}",
+        "",
+      ].join("\r\n"),
+      "utf8",
+    );
+
+    const result = runCliIn(dir);
+    assert(result.status === 0, result.stdout + result.stderr);
+    assertCliSnapshot(result);
+  } finally {
+    await writeFile(source, snapshotSource, "utf8");
+    await rm(path.join(dir, ".bastest"), { recursive: true, force: true });
+    await rm(snapshotsDir, {
       recursive: true,
       force: true,
     });

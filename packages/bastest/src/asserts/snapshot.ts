@@ -120,16 +120,17 @@ function snapshotSource(context: SnapshotContext): string {
 }
 
 function parseSnapshotBody(file: string): string {
-  if (!file.startsWith("---\n")) {
-    return file;
+  const normalized = file.replace(/\r\n/g, "\n");
+  if (!normalized.startsWith("---\n")) {
+    return normalized;
   }
 
-  const bodyStart = file.indexOf("\n---\n", "---\n".length);
+  const bodyStart = normalized.indexOf("\n---\n", "---\n".length);
   if (bodyStart === -1) {
-    return file;
+    return normalized;
   }
 
-  return file.slice(bodyStart + "\n---\n".length);
+  return normalized.slice(bodyStart + "\n---\n".length);
 }
 
 function readText(file: string): string | undefined {
