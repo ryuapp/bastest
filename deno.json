@@ -13,11 +13,11 @@
     "build": "deno task --cwd packages/bastest build",
     "build:npm": "deno run --allow-read --allow-write --allow-run --allow-env scripts/build-npm.ts",
     "publish:preview": "deno run --allow-read --allow-write --allow-env --allow-net --allow-run npm:pkg-pr-new@0.0.75 publish --no-compact --bin --comment=update './dist/bastest' './dist/@bastest/*'",
-    "build:rust": "deno task build && cargo build --release -p bastest",
+    "build:rust": "cargo build --release -p bastest",
     "format": "deno fmt && cargo fmt -p bastest",
     "format:check": "deno fmt --check && cargo fmt -p bastest -- --check",
-    "lint": "deno task build && deno lint && cargo clippy -p bastest --all-targets -- -D warnings",
-    "lint:check": "deno task build && deno lint && cargo clippy -p bastest --all-targets -- -D warnings",
+    "lint": "deno lint && cargo clippy -p bastest --all-targets -- -D warnings",
+    "lint:check": "deno lint && cargo clippy -p bastest --all-targets -- -D warnings",
     "typecheck": "deno task --cwd packages/bastest typecheck",
     "test": "deno task --cwd packages/bastest test",
     "bench:initial-run": "deno task --cwd benchmarks/initial-run bench",
@@ -34,6 +34,11 @@
   },
   "fmt": {
     "proseWrap": "preserve"
+  },
+  "lint": {
+    "rules": {
+      "exclude": ["require-await"]
+    }
   },
   "imports": {
     "dax": "npm:dax@0.48.3",

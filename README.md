@@ -6,6 +6,7 @@ Test runner for JavaScript runtimes.
 
 - In-source tests with `import.meta.test`
 - Minimal agent-friendly reporting
+- Snapshot assertions
 - Type testing support
 
 ## Example

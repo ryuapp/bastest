@@ -2,8 +2,8 @@ import { defineConfig } from "tsdown";
 
 export default defineConfig({
   entry: {
-    "runners/node": "src/runners/node.ts",
-    index: "src/mod.ts",
+    runner: "src/runner.ts",
+    mod: "src/mod.ts",
   },
   format: "esm",
   platform: "node",

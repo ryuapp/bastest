@@ -30,9 +30,12 @@ pub fn transform_test_file(file: &Path, package_root: &Path) -> Result<PathBuf, 
 
     let source = fs::read_to_string(file)
         .map_err(|error| format!("failed to read {}: {error}", file.display()))?;
-    let rewritten = rewrite_power_assert(
+    let rewritten = rewrite_assert_calls(
         file,
-        &rewrite_runtime_imports(&source, package_root, &temp_dir)?,
+        &rewrite_relative_imports(
+            file,
+            &rewrite_runtime_imports(&source, package_root, &temp_dir)?,
+        )?,
     )?;
     let code = if matches!(extension, "jsx" | "tsx") {
         transform_jsx(file, &rewritten)?
@@ -85,20 +88,192 @@ fn rewrite_runtime_imports(
     output_dir: &Path,
 ) -> Result<String, String> {
     let bastest_module = runtime_module_specifier(package_root, output_dir)?;
-    Ok(source
-        .replace("import.meta.test", "true")
-        .replace(
-            "\"bastest\"",
-            &serde_json::to_string(&bastest_module).unwrap(),
-        )
-        .replace(
-            "'bastest'",
-            &serde_json::to_string(&bastest_module).unwrap(),
-        ))
+    Ok(rewrite_bastest_imports(
+        &rewrite_import_meta_test(source),
+        &bastest_module,
+    ))
 }
 
-fn rewrite_power_assert(file: &Path, source: &str) -> Result<String, String> {
-    if !source.contains("assert(") {
+fn rewrite_import_meta_test(source: &str) -> String {
+    const TARGET: &str = "import.meta.test";
+    let mut output = String::with_capacity(source.len());
+    let mut cursor = 0;
+    let bytes = source.as_bytes();
+    let mut index = 0;
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\'' | b'"' | b'`' => {
+                index = skip_string(bytes, index);
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'/') => {
+                index = skip_line_comment(bytes, index + 2);
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                index = skip_block_comment(bytes, index + 2);
+            }
+            _ if bytes[index..].starts_with(TARGET.as_bytes()) => {
+                output.push_str(&source[cursor..index]);
+                output.push_str("true");
+                index += TARGET.len();
+                cursor = index;
+            }
+            _ => {
+                index += 1;
+            }
+        }
+    }
+
+    output.push_str(&source[cursor..]);
+    output
+}
+
+fn skip_string(bytes: &[u8], start: usize) -> usize {
+    let quote = bytes[start];
+    let mut index = start + 1;
+    while index < bytes.len() {
+        if bytes[index] == b'\\' {
+            index = (index + 2).min(bytes.len());
+            continue;
+        }
+        if bytes[index] == quote {
+            return index + 1;
+        }
+        index += 1;
+    }
+    bytes.len()
+}
+
+fn skip_line_comment(bytes: &[u8], mut index: usize) -> usize {
+    while index < bytes.len() && bytes[index] != b'\n' {
+        index += 1;
+    }
+    index
+}
+
+fn skip_block_comment(bytes: &[u8], mut index: usize) -> usize {
+    while index + 1 < bytes.len() {
+        if bytes[index] == b'*' && bytes[index + 1] == b'/' {
+            return index + 2;
+        }
+        index += 1;
+    }
+    bytes.len()
+}
+
+fn rewrite_bastest_imports(source: &str, module: &str) -> String {
+    let mut output = String::with_capacity(source.len());
+    let mut cursor = 0;
+    let mut chars = source.char_indices().peekable();
+
+    while let Some((start, character)) = chars.next() {
+        if character != '"' && character != '\'' {
+            continue;
+        }
+
+        let quote = character;
+        let mut end = None;
+        let mut escaped = false;
+        for (index, current) in chars.by_ref() {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            if current == '\\' {
+                escaped = true;
+                continue;
+            }
+            if current == quote {
+                end = Some(index);
+                break;
+            }
+        }
+
+        let Some(end) = end else {
+            break;
+        };
+        let specifier = &source[start + quote.len_utf8()..end];
+        if specifier != "bastest" || !is_static_import_specifier(&source[..start]) {
+            continue;
+        }
+
+        output.push_str(&source[cursor..start + quote.len_utf8()]);
+        output.push_str(module);
+        cursor = end;
+    }
+
+    output.push_str(&source[cursor..]);
+    output
+}
+
+fn rewrite_relative_imports(file: &Path, source: &str) -> Result<String, String> {
+    let Some(parent) = file.parent() else {
+        return Ok(source.to_string());
+    };
+
+    let mut output = String::with_capacity(source.len());
+    let mut cursor = 0;
+    let mut chars = source.char_indices().peekable();
+
+    while let Some((start, character)) = chars.next() {
+        if character != '"' && character != '\'' {
+            continue;
+        }
+
+        let quote = character;
+        let mut end = None;
+        let mut escaped = false;
+        for (index, current) in chars.by_ref() {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            if current == '\\' {
+                escaped = true;
+                continue;
+            }
+            if current == quote {
+                end = Some(index);
+                break;
+            }
+        }
+
+        let Some(end) = end else {
+            break;
+        };
+        let specifier = &source[start + quote.len_utf8()..end];
+        if !is_relative_specifier(specifier) || !is_static_import_specifier(&source[..start]) {
+            continue;
+        }
+
+        let resolved = parent.join(specifier);
+        let url = url::Url::from_file_path(&resolved).map_err(|_| {
+            format!(
+                "failed to create file URL for import {} in {}",
+                specifier,
+                file.display()
+            )
+        })?;
+        output.push_str(&source[cursor..start + quote.len_utf8()]);
+        output.push_str(url.as_str());
+        cursor = end;
+    }
+
+    output.push_str(&source[cursor..]);
+    Ok(output)
+}
+
+fn is_relative_specifier(specifier: &str) -> bool {
+    specifier.starts_with("./") || specifier.starts_with("../")
+}
+
+fn is_static_import_specifier(before: &str) -> bool {
+    let before = before.trim_end();
+    before.ends_with("from") || before.ends_with("import")
+}
+
+fn rewrite_assert_calls(file: &Path, source: &str) -> Result<String, String> {
+    if !source.contains("assert(") && !source.contains("assertSnapshot(") {
         return Ok(source.to_string());
     }
 
@@ -137,18 +312,25 @@ struct AssertTransformCollector<'a> {
 
 impl<'a> Visit<'a> for AssertTransformCollector<'_> {
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
-        if is_assert_callee(&call.callee)
-            && let Some(first_argument) = call.arguments.first()
-        {
+        if let Some(first_argument) = call.arguments.first() {
             let expression_span = first_argument.span();
             let expression = source_text(self.source, expression_span).trim();
-            let captures = collect_captures(self.source, first_argument);
-            let metadata = power_assert_metadata(expression, captures);
-            let last_argument = call.arguments.last().unwrap_or(first_argument);
-            self.replacements.push(Replacement {
-                index: last_argument.span().end as usize,
-                text: format!(", {metadata}"),
-            });
+            if is_assert_callee(&call.callee) {
+                let captures = collect_captures(self.source, first_argument);
+                let metadata = power_assert_metadata(expression, captures);
+                let last_argument = call.arguments.last().unwrap_or(first_argument);
+                self.replacements.push(Replacement {
+                    index: last_argument.span().end as usize,
+                    text: format!(", {metadata}"),
+                });
+            } else if is_assert_snapshot_callee(&call.callee) {
+                let last_argument = call.arguments.last().unwrap_or(first_argument);
+                let metadata = snapshot_metadata(expression);
+                self.replacements.push(Replacement {
+                    index: last_argument.span().end as usize,
+                    text: format!(", {metadata}"),
+                });
+            }
         }
         walk::walk_call_expression(self, call);
     }
@@ -156,6 +338,10 @@ impl<'a> Visit<'a> for AssertTransformCollector<'_> {
 
 fn is_assert_callee(callee: &Expression<'_>) -> bool {
     matches!(callee, Expression::Identifier(identifier) if identifier.name == "assert")
+}
+
+fn is_assert_snapshot_callee(callee: &Expression<'_>) -> bool {
+    matches!(callee, Expression::Identifier(identifier) if identifier.name == "assertSnapshot")
 }
 
 fn power_assert_metadata(expression: &str, captures: Vec<Capture>) -> String {
@@ -176,6 +362,13 @@ fn power_assert_metadata(expression: &str, captures: Vec<Capture>) -> String {
         "{{ expression: {}, captures: [{}] }}",
         serde_json::to_string(expression).unwrap(),
         captures
+    )
+}
+
+fn snapshot_metadata(expression: &str) -> String {
+    format!(
+        "{{ expression: {} }}",
+        serde_json::to_string(expression).unwrap()
     )
 }
 
@@ -268,7 +461,7 @@ fn runtime_module_specifier(package_root: &Path, _output_dir: &Path) -> Result<S
     let dist = package_root.join("dist");
     let source = package_root.join("src");
     let file = if dist.is_dir() {
-        dist.join("index.mjs")
+        dist.join("mod.mjs")
     } else {
         source.join("mod.ts")
     };

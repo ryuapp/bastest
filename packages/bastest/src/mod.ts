@@ -29,6 +29,8 @@ export interface TestApi {
 declare global {
   // The node runner installs this before importing test files.
   var __bastest_api: { test: TestApi } | undefined;
+  var __bastest_current_cwd: string | undefined;
+  var __bastest_current_file: string | undefined;
 
   interface ImportMeta {
     readonly test: boolean;
@@ -45,3 +47,4 @@ if (!api) {
 
 export const test = api.test;
 export { assert } from "./asserts/assert.ts";
+export { assertSnapshot } from "./asserts/snapshot.ts";

@@ -831,12 +831,21 @@
       "npm:vitest@4.1.8"
     ],
     "members": {
+      "benchmarks/in-source-test": {
+        "dependencies": [
+          "npm:vitest@4.1.8"
+        ]
+      },
       "benchmarks/initial-run": {
         "dependencies": [
-          "jsr:@std/assert@1.0.19"
+          "jsr:@std/assert@1.0.19",
+          "npm:vitest@4.1.8"
         ]
       },
       "packages/bastest": {
+        "dependencies": [
+          "npm:@types/node@25.9.3"
+        ],
         "packageJson": {
           "dependencies": [
             "npm:@types/node@25.9.3",

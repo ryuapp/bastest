@@ -1,0 +1,19 @@
+---
+source: tests/cli/discovery_test.ts
+expression: [
+    `status: ${result.status}`,
+    "stdout:",
+    indentBlock(normalizeLog(result.stdout)),
+    "stderr:",
+    indentBlock(normalizeLog(result.stderr)),
+  ].join("\n")
+---
+status: 0
+stdout:
+  
+  node_modules/pkg/good_test.ts
+    node_modules test ... ok (<duration>)
+  
+  ok | 1 passed | 0 failed | 0 ignored (<duration>)
+stderr:
+  <empty>

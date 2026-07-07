@@ -16,6 +16,7 @@ pub struct Cli {
 pub enum CommandKind {
     Run,
     Clean,
+    Snapshot,
     Watch,
 }
 
@@ -60,6 +61,7 @@ fn command() -> impl Parser<CommandKind> {
     bpaf::any::<String, _, _>("COMMAND", |value| match value.as_str() {
         "run" => Some(CommandKind::Run),
         "clean" => Some(CommandKind::Clean),
+        "snapshot" => Some(CommandKind::Snapshot),
         "watch" => Some(CommandKind::Watch),
         _ => None,
     })

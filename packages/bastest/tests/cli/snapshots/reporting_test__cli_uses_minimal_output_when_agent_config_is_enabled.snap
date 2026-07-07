@@ -1,0 +1,24 @@
+---
+source: packages/bastest/tests/cli/reporting_test.ts
+---
+status: 1
+stdout:
+  
+  fail | 0 passed | 1 failed | 0 ignored (<duration>)
+  Report: tests/fixtures/cli/reporting/agent-config/.bastest/reports/latest/result.json
+  
+  sample_test.ts (<duration>)
+    generated fail ... fail (<duration>)
+      AssertionError: Expected value to be truthy
+  
+      assert(user.name === expected)
+             |             |        
+                           "beta"
+             {
+               "name": "alpha"
+             }
+             "alpha"
+  
+      <stack>
+stderr:
+  <empty>

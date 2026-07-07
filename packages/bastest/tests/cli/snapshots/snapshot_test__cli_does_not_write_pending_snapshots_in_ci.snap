@@ -1,0 +1,22 @@
+---
+source: tests/cli/snapshot_test.ts
+---
+status: 1
+stdout:
+  
+  src/snapshot_test.ts
+    records value ... fail (<duration>)
+      AssertionError: snapshot mismatch
+  snapshot: tests/fixtures/cli/snapshot/ci/src/snapshots/snapshot_test__records_value.snap
+  snapshot was not written because CI is set
+  
+        actual
+          "{\n  \"name\": \"bastest\",\n  \"ok\": true\n}\n"
+        expected
+          ""
+  
+      snapshot: tests/fixtures/cli/snapshot/ci/src/snapshots/snapshot_test__records_value.snap
+  
+  fail | 0 passed | 1 failed | 0 ignored (<duration>)
+stderr:
+  <empty>

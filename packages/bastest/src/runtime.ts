@@ -11,22 +11,47 @@ import type {
   TestFunction,
   TestOptions,
 } from "./mod.ts";
+import type { RuntimePlugin } from "./runtime/plugin.ts";
+import type { SnapshotContext } from "./snapshot/context.ts";
+
+const testContextKey = Symbol.for("bastest.test.context");
+
+export interface TestExecutionContext {
+  runtime: RuntimePlugin;
+  snapshot: SnapshotContext;
+}
+
+interface TestContextGlobal {
+  [testContextKey]?: TestExecutionContext;
+}
+
+export function getTestExecutionContext(): TestExecutionContext | undefined {
+  return (globalThis as TestContextGlobal)[testContextKey];
+}
 
 export interface Registry {
   api: { test: TestApi };
   runAll(
-    options?: { filter?: RegExp; onTest?: (result: TestResult) => void },
+    options: {
+      runtime: RuntimePlugin;
+      filter?: RegExp;
+      onTest?: (result: TestResult) => void;
+    },
   ): Promise<TestResult[]>;
 }
 
 export function createRegistry(): Registry {
   const tests: RegisteredTest[] = [];
+  const nameOccurrences = new Map<string, number>();
   let nextId = 0;
 
   const register = (options: TestOptions) => {
+    const nameOccurrence = (nameOccurrences.get(options.name) ?? 0) + 1;
+    nameOccurrences.set(options.name, nameOccurrence);
     tests.push({
       id: nextId++,
       name: options.name,
+      nameOccurrence,
       fn: options.fn,
       ignore: options.ignore === true,
       only: options.only === true,
@@ -63,7 +88,7 @@ export function createRegistry(): Registry {
 
       const results: TestResult[] = [];
       for (const entry of selected) {
-        const result = await runTest(entry);
+        const result = await runTest(entry, options.runtime);
         results.push(result);
         options?.onTest?.(result);
       }
@@ -72,7 +97,10 @@ export function createRegistry(): Registry {
   };
 }
 
-async function runTest(entry: RegisteredTest): Promise<TestResult> {
+async function runTest(
+  entry: RegisteredTest,
+  runtime: RuntimePlugin,
+): Promise<TestResult> {
   if (entry.ignore) {
     return {
       name: entry.name,
@@ -83,27 +111,44 @@ async function runTest(entry: RegisteredTest): Promise<TestResult> {
   }
 
   const steps: StepResult[] = [];
-  const started = performance.now();
+  const started = runtime.now();
+  const snapshotContext: SnapshotContext = {
+    cwd: globalThis.__bastest_current_cwd,
+    file: globalThis.__bastest_current_file ?? "",
+    testName: entry.name,
+    testNameOccurrence: entry.nameOccurrence,
+    index: 0,
+  };
+  (globalThis as TestContextGlobal)[testContextKey] = {
+    runtime,
+    snapshot: snapshotContext,
+  };
   try {
-    await entry.fn(createContext(entry.name, steps));
+    await entry.fn(createContext(entry.name, steps, runtime));
     return {
       name: entry.name,
       status: "passed",
-      durationMs: elapsed(started),
+      durationMs: elapsed(runtime, started),
       steps,
     };
   } catch (error) {
     return {
       name: entry.name,
       status: "failed",
-      durationMs: elapsed(started),
+      durationMs: elapsed(runtime, started),
       error: serializeError(error),
       steps,
     };
+  } finally {
+    delete (globalThis as TestContextGlobal)[testContextKey];
   }
 }
 
-function createContext(name: string, sink: StepResult[]): TestContext {
+function createContext(
+  name: string,
+  sink: StepResult[],
+  runtime: RuntimePlugin,
+): TestContext {
   return {
     name,
     async step(nameOrOptions: string | StepOptions, fn?: TestFunction) {
@@ -128,20 +173,20 @@ function createContext(name: string, sink: StepResult[]): TestContext {
         return;
       }
 
-      const started = performance.now();
+      const started = runtime.now();
       try {
-        await options.fn(createContext(options.name, childSteps));
+        await options.fn(createContext(options.name, childSteps, runtime));
         sink.push({
           name: options.name,
           status: "passed",
-          durationMs: elapsed(started),
+          durationMs: elapsed(runtime, started),
           steps: childSteps,
         });
       } catch (error) {
         const result: StepResult = {
           name: options.name,
           status: "failed",
-          durationMs: elapsed(started),
+          durationMs: elapsed(runtime, started),
           error: serializeError(error),
           steps: childSteps,
         };
@@ -180,6 +225,6 @@ export function serializeError(error: unknown): SerializedError {
   };
 }
 
-function elapsed(started: number): number {
-  return Math.round((performance.now() - started) * 100) / 100;
+function elapsed(runtime: RuntimePlugin, started: number): number {
+  return Math.round((runtime.now() - started) * 100) / 100;
 }

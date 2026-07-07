@@ -18,7 +18,6 @@ use super::{
 const RESULT_PREFIX: &str = "__BASTEST_RESULT__";
 const EVENT_PREFIX: &str = "__BASTEST_EVENT__";
 const SHUTDOWN_MESSAGE: &str = "__BASTEST_SHUTDOWN__";
-const EMBEDDED_NODE_RUNNER: &str = include_str!("../../dist/runners/node.mjs");
 
 const TEST_EXTENSIONS: &[&str] = &["js", "mjs", "ts", "mts", "jsx", "tsx"];
 const IGNORED_DIRS: &[&str] = &[".bastest"];
@@ -36,13 +35,11 @@ pub struct RunOptions {
 }
 
 pub fn execute(options: RunOptions) -> i32 {
-    let runner = match materialize_node_runner(&options.cwd) {
-        Ok(runner) => runner,
-        Err(error) => {
-            eprintln!("failed to write node runner: {error}");
-            return 1;
-        }
-    };
+    let runner = options.package_root.join("dist").join("runner.mjs");
+    if !runner.is_file() {
+        eprintln!("failed to find node runner at {}", runner.display());
+        return 1;
+    }
     let node = env::var_os("BASTEST_RUNTIME_PATH").unwrap_or_else(|| OsString::from("node"));
     let cli_path = match env::current_exe() {
         Ok(cli_path) => cli_path,
@@ -499,26 +496,6 @@ fn default_concurrency() -> usize {
     thread::available_parallelism()
         .map(usize::from)
         .unwrap_or(1)
-}
-
-fn materialize_node_runner(cwd: &Path) -> std::io::Result<PathBuf> {
-    let runner = cwd
-        .join(".bastest")
-        .join("runner")
-        .join(env!("CARGO_PKG_VERSION"))
-        .join("node.mjs");
-    let should_write = match fs::read_to_string(&runner) {
-        Ok(current) => current != EMBEDDED_NODE_RUNNER,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
-        Err(error) => return Err(error),
-    };
-    if should_write {
-        if let Some(parent) = runner.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(&runner, EMBEDDED_NODE_RUNNER)?;
-    }
-    Ok(runner)
 }
 
 fn path_to_file_url(path: &Path) -> String {
