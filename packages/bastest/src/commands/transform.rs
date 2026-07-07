@@ -326,14 +326,9 @@ impl<'a> Visit<'a> for AssertTransformCollector<'_> {
             } else if is_assert_snapshot_callee(&call.callee) {
                 let last_argument = call.arguments.last().unwrap_or(first_argument);
                 let metadata = snapshot_metadata(expression);
-                let text = if call.arguments.len() == 1 {
-                    format!(", {metadata}")
-                } else {
-                    format!(", {metadata}")
-                };
                 self.replacements.push(Replacement {
                     index: last_argument.span().end as usize,
-                    text,
+                    text: format!(", {metadata}"),
                 });
             }
         }

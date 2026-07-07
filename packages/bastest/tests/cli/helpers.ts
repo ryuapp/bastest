@@ -48,6 +48,7 @@ export function runCliIn(
   delete processEnv.AI_AGENT;
   delete processEnv.CODEX_THREAD_ID;
   delete processEnv.CLAUDECODE;
+  delete processEnv.CI;
 
   const result = spawnSync(cli, args, {
     cwd,
