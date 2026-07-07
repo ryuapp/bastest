@@ -27,10 +27,10 @@
   "nodeModulesDir": "auto",
   "catalog": {
     "@typescript/native-preview": "7.0.0-dev.20260614.1",
-    "@types/node": "25.9.3",
-    "tsdown": "0.22.2",
+    "@types/node": "26.1.0",
+    "tsdown": "0.22.3",
     "unrun": "0.3.1",
-    "vitest": "4.1.8"
+    "vitest": "4.1.10"
   },
   "fmt": {
     "proseWrap": "preserve"
@@ -42,8 +42,8 @@
   },
   "imports": {
     "dax": "npm:dax@0.48.3",
-    "npm": "npm:npm@11.17.0",
+    "npm": "npm:npm@11.18.0",
     "pkg-pr-new": "npm:pkg-pr-new@0.0.75",
-    "vitest": "npm:vitest@4.1.8"
+    "vitest": "npm:vitest@4.1.10"
   }
 }
