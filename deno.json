@@ -35,6 +35,11 @@
   "fmt": {
     "proseWrap": "preserve"
   },
+  "lint": {
+    "rules": {
+      "exclude": ["require-await"]
+    }
+  },
   "imports": {
     "dax": "npm:dax@0.48.3",
     "npm": "npm:npm@11.17.0",
