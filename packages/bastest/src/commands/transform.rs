@@ -285,7 +285,7 @@ fn rewrite_assert_calls(file: &Path, source: &str) -> Result<String, String> {
             ..ParseOptions::default()
         })
         .parse();
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return Err(format!(
             "failed to parse {} for assert transform",
             file.display()
