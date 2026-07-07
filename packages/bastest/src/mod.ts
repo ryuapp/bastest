@@ -31,15 +31,6 @@ declare global {
   var __bastest_api: { test: TestApi } | undefined;
   var __bastest_current_cwd: string | undefined;
   var __bastest_current_file: string | undefined;
-  var __bastest_snapshot:
-    | {
-      cwd?: string;
-      file: string;
-      testName: string;
-      testNameOccurrence: number;
-      index: number;
-    }
-    | undefined;
 
   interface ImportMeta {
     readonly test: boolean;

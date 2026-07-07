@@ -95,6 +95,6 @@ fn find_project_root(start: &std::path::Path) -> Option<PathBuf> {
 
 fn is_package_root(path: &std::path::Path) -> bool {
     path.join("package.json").is_file()
-        && (path.join("dist").join("index.mjs").is_file()
+        && (path.join("dist").join("mod.mjs").is_file()
             || path.join("src").join("mod.ts").is_file())
 }

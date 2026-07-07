@@ -461,7 +461,7 @@ fn runtime_module_specifier(package_root: &Path, _output_dir: &Path) -> Result<S
     let dist = package_root.join("dist");
     let source = package_root.join("src");
     let file = if dist.is_dir() {
-        dist.join("index.mjs")
+        dist.join("mod.mjs")
     } else {
         source.join("mod.ts")
     };
