@@ -29,7 +29,6 @@ const packageJson = {
   license: "MIT",
   os: [metadata.os],
   cpu: [metadata.cpu],
-  ...(metadata.libc ? { libc: [metadata.libc] } : {}),
   files: [binaryName],
   publishConfig: {
     access: "public",
@@ -43,16 +42,15 @@ await Deno.writeTextFile(
 
 function platformMetadata(
   platform: string,
-): { label: string; os: string; cpu: string; libc?: string } {
+): { label: string; os: string; cpu: string } {
   switch (platform) {
     case "linux-x64-musl":
-      return { label: "Linux x64 musl", os: "linux", cpu: "x64", libc: "musl" };
+      return { label: "Linux x64 musl", os: "linux", cpu: "x64" };
     case "linux-arm64-musl":
       return {
         label: "Linux arm64 musl",
         os: "linux",
         cpu: "arm64",
-        libc: "musl",
       };
     case "darwin-arm64":
       return { label: "macOS arm64", os: "darwin", cpu: "arm64" };
