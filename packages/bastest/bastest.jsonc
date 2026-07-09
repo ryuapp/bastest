@@ -5,8 +5,7 @@
     "tests/fixtures"
   ],
   "typecheck": {
-    "enabled": false,
-    "checker": "tsgo"
+    "enabled": false
   },
   "watch": false
 }

@@ -1,6 +1,5 @@
 {
   "typecheck": {
-    "enabled": true,
-    "checker": "tsgo"
+    "enabled": true
   }
 }

@@ -18,23 +18,6 @@ pub struct BastestConfig {
 #[serde(rename_all = "camelCase")]
 pub struct TypecheckConfig {
     pub enabled: Option<bool>,
-    pub checker: Option<TypecheckChecker>,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TypecheckChecker {
-    Tsc,
-    Tsgo,
-}
-
-impl TypecheckChecker {
-    pub fn bin_name(self) -> &'static str {
-        match self {
-            Self::Tsc => "tsc",
-            Self::Tsgo => "tsgo",
-        }
-    }
 }
 
 pub fn load(cwd: &Path) -> Result<BastestConfig, i32> {
@@ -97,12 +80,4 @@ pub fn typecheck_enabled(config: &BastestConfig) -> bool {
         .as_ref()
         .and_then(|typecheck| typecheck.enabled)
         .unwrap_or(false)
-}
-
-pub fn typecheck_checker(config: &BastestConfig) -> TypecheckChecker {
-    config
-        .typecheck
-        .as_ref()
-        .and_then(|typecheck| typecheck.checker)
-        .unwrap_or(TypecheckChecker::Tsc)
 }

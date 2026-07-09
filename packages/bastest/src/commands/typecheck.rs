@@ -2,30 +2,17 @@ use std::path::{Path, PathBuf};
 
 use owo_colors::OwoColorize;
 
-use super::config::TypecheckChecker;
-
-pub fn run(cwd: &Path, package_root: &Path, checker: TypecheckChecker, files: &[PathBuf]) -> i32 {
-    run_tsgo_with_corsa(cwd, package_root, checker, files)
-}
-
-fn run_tsgo_with_corsa(
-    cwd: &Path,
-    package_root: &Path,
-    checker: TypecheckChecker,
-    files: &[PathBuf],
-) -> i32 {
-    let bin_name = checker.bin_name();
-    let Some(bin) = resolve_tsgo_api_bin(cwd, package_root, bin_name) else {
-        eprintln!("failed to find local {bin_name}. Install @typescript/native-preview.");
+pub fn run(cwd: &Path, package_root: &Path, files: &[PathBuf]) -> i32 {
+    let Some(bin) = resolve_typescript_bin(cwd, package_root) else {
+        eprintln!("failed to find local TypeScript compiler. Install typescript.");
         return 1;
     };
     let config_file = cwd.join("tsconfig.json");
     if !config_file.is_file() {
-        eprintln!("failed to run tsgo typecheck: tsconfig.json was not found");
+        eprintln!("failed to run typecheck: tsconfig.json was not found");
         return 1;
     }
 
-    println!("typecheck tsgo");
     let assertions = match collect_type_assertions(files) {
         Ok(assertions) => assertions,
         Err(error) => {
@@ -51,7 +38,7 @@ fn run_tsgo_with_corsa(
             1
         }
         Err(error) => {
-            eprintln!("failed to run tsgo typecheck: {}", error.diagnostic());
+            eprintln!("failed to run typecheck: {}", error.diagnostic());
             1
         }
     }
@@ -63,10 +50,13 @@ async fn run_corsa_assert_type(
     config_file: &Path,
     assertions: Vec<TypeAssertion>,
 ) -> corsa::Result<Vec<TypeAssertionFailure>> {
+    let open_file = assertions
+        .first()
+        .map(|assertion| display_path(Path::new(""), &assertion.file));
     let session = corsa::api::ProjectSession::spawn(
         corsa::api::ApiSpawnConfig::new(bin).with_cwd(cwd),
-        config_file.display().to_string(),
-        None,
+        display_path(Path::new(""), config_file),
+        open_file.map(Into::into),
     )
     .await?;
 
@@ -392,19 +382,158 @@ fn resolve_bin(cwd: &Path, package_root: &Path, name: &str) -> Option<PathBuf> {
     None
 }
 
-fn resolve_tsgo_api_bin(cwd: &Path, package_root: &Path, bin_name: &str) -> Option<PathBuf> {
-    resolve_bin(cwd, package_root, bin_name)
+fn resolve_typescript_bin(cwd: &Path, package_root: &Path) -> Option<PathBuf> {
+    resolve_typescript_native_bin(cwd, package_root)
+        .or_else(|| resolve_bin(cwd, package_root, "tsc"))
+}
+
+fn resolve_typescript_native_bin(cwd: &Path, package_root: &Path) -> Option<PathBuf> {
+    let starts = resolve_package_dirs(cwd, package_root, "typescript");
+    let platform_package = starts
+        .iter()
+        .find_map(|typescript_dir| typescript_native_package_name(typescript_dir))?;
+    for start in starts {
+        for ancestor in start.ancestors() {
+            let package_dir = ancestor
+                .join("node_modules")
+                .join("@typescript")
+                .join(&platform_package);
+            let lib_dir = package_dir.join("lib");
+            if let Some(bin) = native_tsc_in(&lib_dir) {
+                return Some(bin);
+            }
+        }
+    }
+    None
+}
+
+fn typescript_native_package_name(typescript_dir: &Path) -> Option<String> {
+    let package_json = std::fs::read_to_string(typescript_dir.join("package.json")).ok()?;
+    let package: serde_json::Value = serde_json::from_str(&package_json).ok()?;
+    let optional_dependencies = package.get("optionalDependencies")?.as_object()?;
+    let platform_package = format!(
+        "@typescript/typescript-{}-{}",
+        typescript_platform()?,
+        typescript_arch()?
+    );
+    if optional_dependencies.contains_key(&platform_package) {
+        platform_package
+            .strip_prefix("@typescript/")
+            .map(str::to_string)
+    } else {
+        None
+    }
+}
+
+fn resolve_package_dirs(cwd: &Path, package_root: &Path, name: &str) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    for start in [cwd, package_root] {
+        let mut current = start.to_path_buf();
+        loop {
+            let candidate = current.join("node_modules").join(name);
+            if candidate.is_dir() {
+                push_unique_path(&mut found, candidate.clone());
+                if let Ok(canonical) = candidate.canonicalize() {
+                    push_unique_path(&mut found, canonical);
+                }
+            }
+            if !current.pop() {
+                break;
+            }
+        }
+    }
+    found
+}
+
+fn native_tsc_in(dir: &Path) -> Option<PathBuf> {
+    let candidates = if cfg!(windows) {
+        vec!["tsc.exe"]
+    } else {
+        vec!["tsc"]
+    };
+    candidates
+        .into_iter()
+        .map(|candidate| dir.join(candidate))
+        .find(|candidate| candidate.is_file())
+}
+
+fn push_unique_path(paths: &mut Vec<PathBuf>, candidate: PathBuf) {
+    if !paths.iter().any(|path| path == &candidate) {
+        paths.push(candidate);
+    }
 }
 
 fn bin_in(dir: &Path, name: &str) -> Option<PathBuf> {
     let bin_dir = dir.join("node_modules").join(".bin");
-    let candidates = if cfg!(windows) {
-        vec![format!("{name}.cmd"), name.to_string()]
-    } else {
-        vec![name.to_string()]
-    };
-    candidates
+    executable_candidates(name)?
         .into_iter()
         .map(|candidate| bin_dir.join(candidate))
         .find(|candidate| candidate.is_file())
+}
+
+fn executable_candidates(name: &str) -> Option<Vec<String>> {
+    if !cfg!(windows) {
+        return Some(vec![name.to_string()]);
+    }
+
+    let mut candidates = Vec::new();
+    for extension in windows_path_extensions()? {
+        candidates.push(format!("{name}{extension}"));
+    }
+    candidates.push(name.to_string());
+    Some(candidates)
+}
+
+fn windows_path_extensions() -> Option<Vec<String>> {
+    let value = std::env::var_os("PATHEXT")
+        .and_then(|value| value.into_string().ok())
+        .filter(|value| !value.is_empty())?;
+
+    let mut extensions = Vec::new();
+    for extension in value.split(';') {
+        let extension = extension.trim();
+        if extension.is_empty() {
+            continue;
+        }
+        let extension = if extension.starts_with('.') {
+            extension.to_string()
+        } else {
+            format!(".{extension}")
+        };
+        if !extensions
+            .iter()
+            .any(|existing: &String| existing.eq_ignore_ascii_case(&extension))
+        {
+            extensions.push(extension.to_ascii_lowercase());
+        }
+    }
+    (!extensions.is_empty()).then_some(extensions)
+}
+
+fn typescript_platform() -> Option<&'static str> {
+    match std::env::consts::OS {
+        "aix" => Some("aix"),
+        "freebsd" => Some("freebsd"),
+        "linux" => Some("linux"),
+        "macos" => Some("darwin"),
+        "netbsd" => Some("netbsd"),
+        "openbsd" => Some("openbsd"),
+        "illumos" | "solaris" => Some("sunos"),
+        "windows" => Some("win32"),
+        _ => None,
+    }
+}
+
+fn typescript_arch() -> Option<&'static str> {
+    match std::env::consts::ARCH {
+        "aarch64" => Some("arm64"),
+        "arm" => Some("arm"),
+        "loongarch64" => Some("loong64"),
+        "mips64" => Some("mips64el"),
+        "powerpc64" => Some("ppc64"),
+        "riscv64" => Some("riscv64"),
+        "s390x" => Some("s390x"),
+        "x86_64" => Some("x64"),
+        _ => None,
+    }
 }

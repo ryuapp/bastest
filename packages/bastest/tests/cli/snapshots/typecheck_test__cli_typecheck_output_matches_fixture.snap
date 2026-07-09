@@ -1,16 +1,9 @@
 ---
 source: tests/cli/typecheck_test.ts
-expression: [
-    `status: ${result.status}`,
-    "stdout:",
-    indentBlock(normalizeLog(result.stdout)),
-    "stderr:",
-    indentBlock(normalizeLog(result.stderr)),
-  ].join("\n")
 ---
 status: 1
 stdout:
-  typecheck tsgo
+  <empty>
 stderr:
   
   Failed Type Assertions 1

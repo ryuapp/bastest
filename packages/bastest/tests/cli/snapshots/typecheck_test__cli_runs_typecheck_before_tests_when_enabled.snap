@@ -3,7 +3,7 @@ source: tests/cli/typecheck_test.ts
 ---
 status: 1
 stdout:
-  typecheck tsgo
+  <empty>
 stderr:
   
   Failed Type Assertions 1
