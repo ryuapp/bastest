@@ -83,12 +83,7 @@ pub fn execute(options: RunOptions) -> i32 {
     }
 
     if config::typecheck_enabled(&config) {
-        let code = typecheck::run(
-            &options.cwd,
-            &options.package_root,
-            config::typecheck_checker(&config),
-            &files,
-        );
+        let code = typecheck::run(&options.cwd, &options.package_root, &files);
         if code != 0 {
             return code;
         }

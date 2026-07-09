@@ -2,30 +2,17 @@ use std::path::{Path, PathBuf};
 
 use owo_colors::OwoColorize;
 
-use super::config::TypecheckChecker;
-
-pub fn run(cwd: &Path, package_root: &Path, checker: TypecheckChecker, files: &[PathBuf]) -> i32 {
-    run_tsgo_with_corsa(cwd, package_root, checker, files)
-}
-
-fn run_tsgo_with_corsa(
-    cwd: &Path,
-    package_root: &Path,
-    checker: TypecheckChecker,
-    files: &[PathBuf],
-) -> i32 {
-    let bin_name = checker.bin_name();
-    let Some(bin) = resolve_tsgo_api_bin(cwd, package_root, bin_name) else {
-        eprintln!("failed to find local {bin_name}. Install @typescript/native-preview.");
+pub fn run(cwd: &Path, package_root: &Path, files: &[PathBuf]) -> i32 {
+    let Some(bin) = resolve_bin(cwd, package_root, "tsc") else {
+        eprintln!("failed to find local TypeScript compiler. Install typescript.");
         return 1;
     };
     let config_file = cwd.join("tsconfig.json");
     if !config_file.is_file() {
-        eprintln!("failed to run tsgo typecheck: tsconfig.json was not found");
+        eprintln!("failed to run typecheck: tsconfig.json was not found");
         return 1;
     }
 
-    println!("typecheck tsgo");
     let assertions = match collect_type_assertions(files) {
         Ok(assertions) => assertions,
         Err(error) => {
@@ -51,7 +38,7 @@ fn run_tsgo_with_corsa(
             1
         }
         Err(error) => {
-            eprintln!("failed to run tsgo typecheck: {}", error.diagnostic());
+            eprintln!("failed to run typecheck: {}", error.diagnostic());
             1
         }
     }
@@ -63,10 +50,13 @@ async fn run_corsa_assert_type(
     config_file: &Path,
     assertions: Vec<TypeAssertion>,
 ) -> corsa::Result<Vec<TypeAssertionFailure>> {
+    let open_file = assertions
+        .first()
+        .map(|assertion| display_path(Path::new(""), &assertion.file));
     let session = corsa::api::ProjectSession::spawn(
         corsa::api::ApiSpawnConfig::new(bin).with_cwd(cwd),
-        config_file.display().to_string(),
-        None,
+        display_path(Path::new(""), config_file),
+        open_file.map(Into::into),
     )
     .await?;
 
@@ -392,19 +382,49 @@ fn resolve_bin(cwd: &Path, package_root: &Path, name: &str) -> Option<PathBuf> {
     None
 }
 
-fn resolve_tsgo_api_bin(cwd: &Path, package_root: &Path, bin_name: &str) -> Option<PathBuf> {
-    resolve_bin(cwd, package_root, bin_name)
-}
-
 fn bin_in(dir: &Path, name: &str) -> Option<PathBuf> {
     let bin_dir = dir.join("node_modules").join(".bin");
-    let candidates = if cfg!(windows) {
-        vec![format!("{name}.cmd"), name.to_string()]
-    } else {
-        vec![name.to_string()]
-    };
-    candidates
+    executable_candidates(name)?
         .into_iter()
         .map(|candidate| bin_dir.join(candidate))
         .find(|candidate| candidate.is_file())
+}
+
+fn executable_candidates(name: &str) -> Option<Vec<String>> {
+    if !cfg!(windows) {
+        return Some(vec![name.to_string()]);
+    }
+
+    let mut candidates = Vec::new();
+    for extension in windows_path_extensions()? {
+        candidates.push(format!("{name}{extension}"));
+    }
+    candidates.push(name.to_string());
+    Some(candidates)
+}
+
+fn windows_path_extensions() -> Option<Vec<String>> {
+    let value = std::env::var_os("PATHEXT")
+        .and_then(|value| value.into_string().ok())
+        .filter(|value| !value.is_empty())?;
+
+    let mut extensions = Vec::new();
+    for extension in value.split(';') {
+        let extension = extension.trim();
+        if extension.is_empty() {
+            continue;
+        }
+        let extension = if extension.starts_with('.') {
+            extension.to_string()
+        } else {
+            format!(".{extension}")
+        };
+        if !extensions
+            .iter()
+            .any(|existing: &String| existing.eq_ignore_ascii_case(&extension))
+        {
+            extensions.push(extension.to_ascii_lowercase());
+        }
+    }
+    (!extensions.is_empty()).then_some(extensions)
 }

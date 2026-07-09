@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.dependencies]
 bpaf = { version = "=0.9.26", features = ["derive"] }
-corsa = "=0.52.0"
+corsa = "=1.0.0-beta.1"
 jsonc-parser = { version = "=0.33.0", features = ["serde"] }
 mimalloc = "=0.1.52"
 owo-colors = "=4.3.0"

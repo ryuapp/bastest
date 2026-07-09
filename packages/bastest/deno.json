@@ -8,6 +8,10 @@
       "@types/node"
     ]
   },
+  "exclude": [
+    "tests/fixtures/cli/typecheck/enabled/**",
+    "tests/fixtures/typecheck/**"
+  ],
   "tasks": {
     "build": "tsdown --config-loader unrun --config tsdown.config.ts",
     "typecheck": "deno check --unstable-tsgo",
