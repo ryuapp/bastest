@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use owo_colors::OwoColorize;
 
 pub fn run(cwd: &Path, package_root: &Path, files: &[PathBuf]) -> i32 {
-    let Some(bin) = resolve_bin(cwd, package_root, "tsc") else {
+    let Some(bin) = resolve_typescript_bin(cwd, package_root) else {
         eprintln!("failed to find local TypeScript compiler. Install typescript.");
         return 1;
     };
@@ -382,6 +382,87 @@ fn resolve_bin(cwd: &Path, package_root: &Path, name: &str) -> Option<PathBuf> {
     None
 }
 
+fn resolve_typescript_bin(cwd: &Path, package_root: &Path) -> Option<PathBuf> {
+    resolve_typescript_native_bin(cwd, package_root)
+        .or_else(|| resolve_bin(cwd, package_root, "tsc"))
+}
+
+fn resolve_typescript_native_bin(cwd: &Path, package_root: &Path) -> Option<PathBuf> {
+    let starts = resolve_package_dirs(cwd, package_root, "typescript");
+    let platform_package = starts
+        .iter()
+        .find_map(|typescript_dir| typescript_native_package_name(typescript_dir))?;
+    for start in starts {
+        for ancestor in start.ancestors() {
+            let package_dir = ancestor
+                .join("node_modules")
+                .join("@typescript")
+                .join(&platform_package);
+            let lib_dir = package_dir.join("lib");
+            if let Some(bin) = native_tsc_in(&lib_dir) {
+                return Some(bin);
+            }
+        }
+    }
+    None
+}
+
+fn typescript_native_package_name(typescript_dir: &Path) -> Option<String> {
+    let package_json = std::fs::read_to_string(typescript_dir.join("package.json")).ok()?;
+    let package: serde_json::Value = serde_json::from_str(&package_json).ok()?;
+    let optional_dependencies = package.get("optionalDependencies")?.as_object()?;
+    let platform_package = format!(
+        "@typescript/typescript-{}-{}",
+        typescript_platform()?,
+        typescript_arch()?
+    );
+    if optional_dependencies.contains_key(&platform_package) {
+        platform_package
+            .strip_prefix("@typescript/")
+            .map(str::to_string)
+    } else {
+        None
+    }
+}
+
+fn resolve_package_dirs(cwd: &Path, package_root: &Path, name: &str) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    for start in [cwd, package_root] {
+        let mut current = start.to_path_buf();
+        loop {
+            let candidate = current.join("node_modules").join(name);
+            if candidate.is_dir() {
+                push_unique_path(&mut found, candidate.clone());
+                if let Ok(canonical) = candidate.canonicalize() {
+                    push_unique_path(&mut found, canonical);
+                }
+            }
+            if !current.pop() {
+                break;
+            }
+        }
+    }
+    found
+}
+
+fn native_tsc_in(dir: &Path) -> Option<PathBuf> {
+    let candidates = if cfg!(windows) {
+        vec!["tsc.exe"]
+    } else {
+        vec!["tsc"]
+    };
+    candidates
+        .into_iter()
+        .map(|candidate| dir.join(candidate))
+        .find(|candidate| candidate.is_file())
+}
+
+fn push_unique_path(paths: &mut Vec<PathBuf>, candidate: PathBuf) {
+    if !paths.iter().any(|path| path == &candidate) {
+        paths.push(candidate);
+    }
+}
+
 fn bin_in(dir: &Path, name: &str) -> Option<PathBuf> {
     let bin_dir = dir.join("node_modules").join(".bin");
     executable_candidates(name)?
@@ -427,4 +508,32 @@ fn windows_path_extensions() -> Option<Vec<String>> {
         }
     }
     (!extensions.is_empty()).then_some(extensions)
+}
+
+fn typescript_platform() -> Option<&'static str> {
+    match std::env::consts::OS {
+        "aix" => Some("aix"),
+        "freebsd" => Some("freebsd"),
+        "linux" => Some("linux"),
+        "macos" => Some("darwin"),
+        "netbsd" => Some("netbsd"),
+        "openbsd" => Some("openbsd"),
+        "illumos" | "solaris" => Some("sunos"),
+        "windows" => Some("win32"),
+        _ => None,
+    }
+}
+
+fn typescript_arch() -> Option<&'static str> {
+    match std::env::consts::ARCH {
+        "aarch64" => Some("arm64"),
+        "arm" => Some("arm"),
+        "loongarch64" => Some("loong64"),
+        "mips64" => Some("mips64el"),
+        "powerpc64" => Some("ppc64"),
+        "riscv64" => Some("riscv64"),
+        "s390x" => Some("s390x"),
+        "x86_64" => Some("x64"),
+        _ => None,
+    }
 }
