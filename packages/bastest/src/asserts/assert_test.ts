@@ -30,7 +30,8 @@ test("assert reports captured values", () => {
 test("assert narrows values", () => {
   const value: string | undefined = "bastest";
   assert(value);
-  assert<string>(value);
+  const narrowed: string = value;
+  assert(narrowed === "bastest");
 });
 
 function catchError(fn: () => void): Record<string, unknown> | undefined {

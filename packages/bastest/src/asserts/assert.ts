@@ -7,8 +7,8 @@ export interface AssertMetadata {
   >;
 }
 
-export function assert<Expected = unknown>(
-  value: Expected,
+export function assert(
+  value: unknown,
   message?: string | AssertMetadata,
   metadata?: AssertMetadata,
 ): asserts value {

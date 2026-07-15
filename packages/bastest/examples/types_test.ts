@@ -1,7 +1,10 @@
-import { assert, test } from "bastest";
+import { assertType, test } from "bastest";
 
 test("supports typed assertions", () => {
-  assert<{ a: number }>({ a: 1 });
-  assert<string>("bastest");
-  assert<string | number>(1);
+  const un = undefined;
+
+  assertType<{ a: number }>({ a: 1 });
+  assertType<string>("bastest");
+  assertType<string | number>(1);
+  assertType<undefined>(un);
 });

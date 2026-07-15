@@ -47,4 +47,5 @@ if (!api) {
 
 export const test = api.test;
 export { assert } from "./asserts/assert.ts";
+export { assertType } from "./asserts/assert_type.ts";
 export { assertSnapshot } from "./asserts/snapshot.ts";
