@@ -8,7 +8,9 @@ import { assert, assertSnapshot } from "bastest";
 export const packageRoot = process.cwd();
 export const fixtures = path.join(packageRoot, "tests", "fixtures");
 export const cliFixtures = path.join(fixtures, "cli");
-const temporaryRoots = [...new Set([tmpdir(), realpathSync(tmpdir())])];
+const temporaryRoots = [...new Set([tmpdir(), realpathSync(tmpdir())])].sort(
+  (left, right) => right.length - left.length,
+);
 
 const cli = requireEnv("BASTEST_CLI_PATH");
 
