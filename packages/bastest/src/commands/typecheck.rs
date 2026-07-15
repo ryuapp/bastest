@@ -1,6 +1,11 @@
 use std::path::{Path, PathBuf};
 
 use owo_colors::OwoColorize;
+use oxc_allocator::Allocator;
+use oxc_ast::ast::{CallExpression, Expression};
+use oxc_ast_visit::{Visit, walk};
+use oxc_parser::Parser;
+use oxc_span::{GetSpan, SourceType};
 
 pub fn run(cwd: &Path, package_root: &Path, files: &[PathBuf]) -> i32 {
     let Some(bin) = resolve_typescript_bin(cwd, package_root) else {
@@ -131,99 +136,64 @@ fn collect_type_assertions(files: &[PathBuf]) -> std::io::Result<Vec<TypeAsserti
 }
 
 fn parse_type_assertions(file: &Path, source: &str) -> Vec<TypeAssertion> {
-    let mut assertions = Vec::new();
-    let mut offset = 0;
-
-    while let Some(relative) = source[offset..].find("assert<") {
-        let start = offset + relative;
-        let type_start = start + "assert<".len();
-        let Some(type_end) = find_matching_angle(source, type_start) else {
-            offset = type_start;
-            continue;
-        };
-        let call_start = skip_whitespace(source, type_end + 1);
-        if !source[call_start..].starts_with('(') {
-            offset = type_end + 1;
-            continue;
-        }
-
-        let expression_start = skip_whitespace(source, call_start + 1);
-        let Some(position_index) = first_expression_probe_position(source, expression_start) else {
-            offset = call_start + 1;
-            continue;
-        };
-        let (expression_line, expression_column) = line_column(source, position_index);
-        assertions.push(TypeAssertion {
-            file: file.to_path_buf(),
-            expected: source[type_start..type_end].trim().to_string(),
-            expression_position: utf16_position(source, position_index),
-            expression_line,
-            expression_column,
-            source_line: source_line_at(source, position_index).to_string(),
-        });
-        offset = call_start + 1;
+    if !source.contains("assertType") {
+        return Vec::new();
     }
 
-    assertions
+    let allocator = Allocator::default();
+    let source_type = SourceType::from_path(file).unwrap_or_else(|_| SourceType::mjs());
+    let parsed = Parser::new(&allocator, source, source_type).parse();
+    let mut collector = TypeAssertionCollector {
+        file,
+        source,
+        assertions: Vec::new(),
+    };
+    collector.visit_program(&parsed.program);
+    collector.assertions
 }
 
-fn find_matching_angle(source: &str, start: usize) -> Option<usize> {
-    let mut depth = 1;
-    let mut index = start;
-    let bytes = source.as_bytes();
-    while index < bytes.len() {
-        match bytes[index] {
-            b'<' => depth += 1,
-            b'>' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(index);
-                }
-            }
-            b'\'' | b'"' | b'`' => {
-                index = skip_string(source, index)?;
-            }
-            _ => {}
+struct TypeAssertionCollector<'s> {
+    file: &'s Path,
+    source: &'s str,
+    assertions: Vec<TypeAssertion>,
+}
+
+impl<'a> Visit<'a> for TypeAssertionCollector<'_> {
+    fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
+        if matches!(&call.callee, Expression::Identifier(identifier) if identifier.name == "assertType")
+            && let Some(type_arguments) = &call.type_arguments
+            && let [expected_type] = type_arguments.params.as_slice()
+            && let Some(first_argument) = call.arguments.first()
+        {
+            let expected_span = expected_type.span();
+            let expression_span = first_argument.span();
+            let position_index = expression_probe_position(
+                self.source,
+                expression_span.start as usize,
+                expression_span.end as usize,
+            );
+            let (expression_line, expression_column) = line_column(self.source, position_index);
+            self.assertions.push(TypeAssertion {
+                file: self.file.to_path_buf(),
+                expected: self.source[expected_span.start as usize..expected_span.end as usize]
+                    .trim()
+                    .to_string(),
+                expression_position: utf16_position(self.source, position_index),
+                expression_line,
+                expression_column,
+                source_line: source_line_at(self.source, position_index).to_string(),
+            });
         }
-        index += 1;
+        walk::walk_call_expression(self, call);
     }
-    None
 }
 
-fn skip_string(source: &str, start: usize) -> Option<usize> {
-    let quote = source.as_bytes()[start];
-    let mut index = start + 1;
-    while index < source.len() {
-        let byte = source.as_bytes()[index];
-        if byte == b'\\' {
-            index += 2;
-            continue;
-        }
-        if byte == quote {
-            return Some(index);
-        }
-        index += 1;
-    }
-    None
-}
-
-fn first_expression_probe_position(source: &str, start: usize) -> Option<usize> {
-    let start = skip_whitespace(source, start);
-    source[start..]
+fn expression_probe_position(source: &str, start: usize, end: usize) -> usize {
+    source[start..end]
         .char_indices()
         .find(|(_, char)| is_identifier_start(*char))
         .map(|(relative, _)| start + relative)
-}
-
-fn skip_whitespace(source: &str, start: usize) -> usize {
-    let mut index = start;
-    while let Some(char) = source[index..].chars().next() {
-        if !char.is_whitespace() {
-            break;
-        }
-        index += char.len_utf8();
-    }
-    index
+        .unwrap_or(start)
 }
 
 fn is_identifier_start(char: char) -> bool {
@@ -535,5 +505,37 @@ fn typescript_arch() -> Option<&'static str> {
         "s390x" => Some("s390x"),
         "x86_64" => Some("x64"),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_only_bare_assert_type_calls() {
+        let source = r#"
+const text = "assertType<string>(wrong)";
+myassertType<string>(wrong);
+object.assertType<string>(wrong);
+// assertType<string>(wrong);
+assertType <Array<string | undefined>>(value);
+"#;
+
+        let assertions = parse_type_assertions(Path::new("sample.ts"), source);
+
+        assert_eq!(assertions.len(), 1);
+        assert_eq!(assertions[0].expected, "Array<string | undefined>");
+        assert_eq!(
+            assertions[0].source_line,
+            "assertType <Array<string | undefined>>(value);"
+        );
+    }
+
+    #[test]
+    fn skips_parsing_files_without_assert_type_candidates() {
+        let assertions = parse_type_assertions(Path::new("invalid.ts"), "const = ;");
+
+        assert!(assertions.is_empty());
     }
 }
