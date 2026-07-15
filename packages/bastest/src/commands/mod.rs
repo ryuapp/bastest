@@ -5,4 +5,3 @@ pub mod run;
 pub mod snapshot;
 pub mod transform;
 pub mod typecheck;
-pub mod watch;

@@ -7,6 +7,5 @@
   ],
   "typecheck": {
     "enabled": false
-  },
-  "watch": false
+  }
 }
