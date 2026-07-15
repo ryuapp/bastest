@@ -1,8 +1,28 @@
+import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "bastest";
-import { assert, assertCliSnapshot, cliFixtures, runCliIn } from "./helpers.ts";
+import {
+  assert,
+  assertCliSnapshot,
+  cliFixtures,
+  normalizeLog,
+  runCliIn,
+} from "./helpers.ts";
+
+test("CLI log normalization preserves temporary path delimiters", () => {
+  const temporaryDirectory = path.join(
+    realpathSync(tmpdir()),
+    "bastest-cli-example",
+  );
+  const message =
+    `could not find \`bastest.jsonc\` in \`${temporaryDirectory}\` or any parent directory`;
+  assert(
+    normalizeLog(message) ===
+      "could not find `bastest.jsonc` in `<tmp>` or any parent directory",
+  );
+});
 
 test("CLI discovers in-source tests by default", () => {
   const result = runCliIn(path.join(cliFixtures, "discovery", "in-source"));
