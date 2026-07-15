@@ -240,17 +240,18 @@ fn run_files(options: RunFilesOptions) -> Result<Vec<FileResult>, i32> {
     let failed = Arc::new(AtomicBool::new(false));
     let fatal = Arc::new(Mutex::new(None));
     let output = Arc::new(Mutex::new(()));
+    let worker_config = NodeWorkerConfig {
+        node: options.node,
+        runner: options.runner,
+        cwd: options.cwd.clone(),
+        package_root: options.package_root.clone(),
+        cli_path: options.cli_path,
+        filter: options.filter,
+    };
 
     let mut threads = Vec::new();
     for _ in 0..concurrency {
-        let worker = NodeWorker::new(NodeWorkerConfig {
-            node: options.node.clone(),
-            runner: options.runner.clone(),
-            cwd: options.cwd.clone(),
-            package_root: options.package_root.clone(),
-            cli_path: options.cli_path.clone(),
-            filter: options.filter.clone(),
-        })?;
+        let worker_config = worker_config.clone();
         let queue = Arc::clone(&queue);
         let results = Arc::clone(&results);
         let failed = Arc::clone(&failed);
@@ -286,6 +287,14 @@ fn run_files(options: RunFilesOptions) -> Result<Vec<FileResult>, i32> {
                             return;
                         }
                     };
+                let worker = match NodeWorker::new(worker_config.clone()) {
+                    Ok(worker) => worker,
+                    Err(code) => {
+                        *fatal.lock().expect("fatal lock poisoned") = Some(code);
+                        failed.store(true, Ordering::Relaxed);
+                        return;
+                    }
+                };
                 let result = match worker.run_file(&file, &bundle_file, &cwd, agent, &output) {
                     Ok(result) => result,
                     Err(code) => {
@@ -294,6 +303,7 @@ fn run_files(options: RunFilesOptions) -> Result<Vec<FileResult>, i32> {
                         return;
                     }
                 };
+                drop(worker);
                 let result_failed = result.load_error.is_some()
                     || result
                         .tests
@@ -329,6 +339,7 @@ fn run_files(options: RunFilesOptions) -> Result<Vec<FileResult>, i32> {
     Ok(results)
 }
 
+#[derive(Clone)]
 struct NodeWorkerConfig {
     node: OsString,
     runner: PathBuf,

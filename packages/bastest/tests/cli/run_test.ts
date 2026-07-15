@@ -14,6 +14,15 @@ test("CLI loads optimized dependencies in CommonJS packages", () => {
   assert(result.status === 0, result.stderr);
 });
 
+test("CLI isolates each test file in its own process", () => {
+  const result = runCli(
+    "--concurrency=1",
+    fixtureArg("cli", "run", "isolation", "a_check_test.ts"),
+    fixtureArg("cli", "run", "isolation", "z_mutate_test.ts"),
+  );
+  assert(result.status === 0, result.stdout + result.stderr);
+});
+
 test("CLI returns non-zero when a test fails", () => {
   const result = runCli(fixtureArg("cli", "run", "fail", "sample_test.ts"));
   assert(result.status === 1);
