@@ -10,6 +10,7 @@ use std::process::exit;
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() {
+    let cli = cli::parse();
     let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let package_root = match find_package_root(&cwd) {
         Some(package_root) => package_root,
@@ -29,7 +30,6 @@ fn main() {
         }
     };
 
-    let cli = cli::parse();
     let code = match cli.command {
         cli::CommandKind::Run => commands::run::execute(commands::run::RunOptions {
             cwd: project_root,
@@ -43,7 +43,6 @@ fn main() {
         }),
         cli::CommandKind::Clean => commands::clean::execute(&project_root),
         cli::CommandKind::Snapshot => commands::snapshot::execute(&project_root, &cli.files),
-        cli::CommandKind::Watch => commands::watch::execute(),
     };
 
     exit(code);

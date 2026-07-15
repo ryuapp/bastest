@@ -17,7 +17,6 @@ pub enum CommandKind {
     Run,
     Clean,
     Snapshot,
-    Watch,
 }
 
 pub fn parse() -> Cli {
@@ -62,7 +61,6 @@ fn command() -> impl Parser<CommandKind> {
         "run" => Some(CommandKind::Run),
         "clean" => Some(CommandKind::Clean),
         "snapshot" => Some(CommandKind::Snapshot),
-        "watch" => Some(CommandKind::Watch),
         _ => None,
     })
     .optional()

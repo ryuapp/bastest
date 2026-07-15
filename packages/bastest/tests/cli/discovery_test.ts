@@ -62,6 +62,17 @@ test("CLI fails when bastest.jsonc is not found", async () => {
   }
 });
 
+test("CLI shows help without bastest.jsonc", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "bastest-cli-"));
+  try {
+    const result = runCliIn(dir, "--help");
+    assert(result.status === 0, result.stderr);
+    assert(result.stdout.includes("Usage: bastest"));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("CLI can disable in-source test discovery", () => {
   const result = runCliIn(
     path.join(cliFixtures, "discovery", "in-source-disabled"),
