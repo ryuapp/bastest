@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -11,8 +12,12 @@ import {
 } from "./helpers.ts";
 
 test("CLI log normalization preserves temporary path delimiters", () => {
+  const temporaryDirectory = path.join(
+    realpathSync(tmpdir()),
+    "bastest-cli-example",
+  );
   const message =
-    "could not find `bastest.jsonc` in `/tmp/bastest-cli-example` or any parent directory";
+    `could not find \`bastest.jsonc\` in \`${temporaryDirectory}\` or any parent directory`;
   assert(
     normalizeLog(message) ===
       "could not find `bastest.jsonc` in `<tmp>` or any parent directory",

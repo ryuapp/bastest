@@ -1,12 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { rmSync } from "node:fs";
+import { realpathSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { assert, assertSnapshot } from "bastest";
 
 export const packageRoot = process.cwd();
 export const fixtures = path.join(packageRoot, "tests", "fixtures");
 export const cliFixtures = path.join(fixtures, "cli");
+const temporaryRoots = [...new Set([tmpdir(), realpathSync(tmpdir())])];
 
 const cli = requireEnv("BASTEST_CLI_PATH");
 
@@ -107,13 +109,20 @@ function indentBlock(value: string): string {
 }
 
 export function normalizeLog(value: string): string {
-  return normalizeNewlines(value)
-    .replace(new RegExp(pathPattern(fixtures), "gi"), "tests/fixtures")
-    .replace(
-      /[A-Z]:[\\/][^ \n"`]*[\\/](?:Temp|tmp)[\\/]bastest-cli-[^ \n"`]+/gi,
+  let normalized = normalizeNewlines(value).replace(
+    new RegExp(pathPattern(fixtures), "gi"),
+    "tests/fixtures",
+  );
+  for (const root of temporaryRoots) {
+    normalized = normalized.replace(
+      new RegExp(
+        `${pathPattern(root)}[\\\\/]bastest-cli-[^ \\n"\`]+`,
+        "gi",
+      ),
       "<tmp>",
-    )
-    .replace(/\/tmp\/bastest-cli-[^ \n"`]+/g, "<tmp>")
+    );
+  }
+  return normalized
     .replace(
       /file:\/\/\/[^ \n"]+\.(?:ts|mjs|js|cjs|mts)/g,
       "<module-url>",
