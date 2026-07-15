@@ -1,3 +1,4 @@
+mod cache_version;
 mod cli;
 mod commands;
 

@@ -27,6 +27,7 @@
   "nodeModulesDir": "auto",
   "catalog": {
     "@types/node": "26.1.0",
+    "jsdom": "29.1.1",
     "tsdown": "0.22.3",
     "typescript": "7.0.2",
     "unrun": "0.3.1",

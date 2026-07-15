@@ -11,7 +11,7 @@ use std::thread;
 use super::{
     config,
     reporter::{self, FileResult},
-    transform::transform_test_file,
+    transform::{prepare_test_run, transform_test_file},
     typecheck,
 };
 
@@ -223,6 +223,13 @@ struct RunFilesOptions {
 }
 
 fn run_files(options: RunFilesOptions) -> Result<Vec<FileResult>, i32> {
+    let transform_context = match prepare_test_run(&options.files, &options.cwd) {
+        Ok(context) => Arc::new(context),
+        Err(error) => {
+            eprintln!("{error}");
+            return Err(1);
+        }
+    };
     let concurrency = options
         .concurrency
         .unwrap_or_else(default_concurrency)
@@ -253,6 +260,7 @@ fn run_files(options: RunFilesOptions) -> Result<Vec<FileResult>, i32> {
         let cwd = options.cwd.clone();
         let agent = options.agent;
         let package_root = options.package_root.clone();
+        let transform_context = Arc::clone(&transform_context);
 
         threads.push(thread::spawn(move || {
             loop {
@@ -268,15 +276,16 @@ fn run_files(options: RunFilesOptions) -> Result<Vec<FileResult>, i32> {
                     return;
                 };
 
-                let bundle_file = match transform_test_file(&file, &package_root) {
-                    Ok(bundle_file) => bundle_file,
-                    Err(error) => {
-                        eprintln!("{error}");
-                        *fatal.lock().expect("fatal lock poisoned") = Some(1);
-                        failed.store(true, Ordering::Relaxed);
-                        return;
-                    }
-                };
+                let bundle_file =
+                    match transform_test_file(&file, &package_root, &cwd, &transform_context) {
+                        Ok(bundle_file) => bundle_file,
+                        Err(error) => {
+                            eprintln!("{error}");
+                            *fatal.lock().expect("fatal lock poisoned") = Some(1);
+                            failed.store(true, Ordering::Relaxed);
+                            return;
+                        }
+                    };
                 let result = match worker.run_file(&file, &bundle_file, &cwd, agent, &output) {
                     Ok(result) => result,
                     Err(code) => {

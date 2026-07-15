@@ -106,14 +106,14 @@ function indentBlock(value: string): string {
   return value.split("\n").map((line) => `  ${line}`).join("\n");
 }
 
-function normalizeLog(value: string): string {
+export function normalizeLog(value: string): string {
   return normalizeNewlines(value)
     .replace(new RegExp(pathPattern(fixtures), "gi"), "tests/fixtures")
     .replace(
       /[A-Z]:[\\/][^ \n"`]*[\\/](?:Temp|tmp)[\\/]bastest-cli-[^ \n"`]+/gi,
       "<tmp>",
     )
-    .replace(/\/tmp\/bastest-cli-[^ \n"]+/g, "<tmp>")
+    .replace(/\/tmp\/bastest-cli-[^ \n"`]+/g, "<tmp>")
     .replace(
       /file:\/\/\/[^ \n"]+\.(?:ts|mjs|js|cjs|mts)/g,
       "<module-url>",
