@@ -240,17 +240,18 @@ fn run_files(options: RunFilesOptions) -> Result<Vec<FileResult>, i32> {
     let failed = Arc::new(AtomicBool::new(false));
     let fatal = Arc::new(Mutex::new(None));
     let output = Arc::new(Mutex::new(()));
+    let worker_config = RuntimeWorkerConfig {
+        node: options.node,
+        runner: options.runner,
+        cwd: options.cwd.clone(),
+        package_root: options.package_root.clone(),
+        cli_path: options.cli_path,
+        filter: options.filter,
+    };
 
     let mut threads = Vec::new();
     for _ in 0..concurrency {
-        let worker = NodeWorker::new(NodeWorkerConfig {
-            node: options.node.clone(),
-            runner: options.runner.clone(),
-            cwd: options.cwd.clone(),
-            package_root: options.package_root.clone(),
-            cli_path: options.cli_path.clone(),
-            filter: options.filter.clone(),
-        })?;
+        let worker_config = worker_config.clone();
         let queue = Arc::clone(&queue);
         let results = Arc::clone(&results);
         let failed = Arc::clone(&failed);
@@ -286,14 +287,24 @@ fn run_files(options: RunFilesOptions) -> Result<Vec<FileResult>, i32> {
                             return;
                         }
                     };
-                let result = match worker.run_file(&file, &bundle_file, &cwd, agent, &output) {
-                    Ok(result) => result,
+                let runtime_worker = match RuntimeWorker::new(worker_config.clone()) {
+                    Ok(worker) => worker,
                     Err(code) => {
                         *fatal.lock().expect("fatal lock poisoned") = Some(code);
                         failed.store(true, Ordering::Relaxed);
                         return;
                     }
                 };
+                let result =
+                    match runtime_worker.run_file(&file, &bundle_file, &cwd, agent, &output) {
+                        Ok(result) => result,
+                        Err(code) => {
+                            *fatal.lock().expect("fatal lock poisoned") = Some(code);
+                            failed.store(true, Ordering::Relaxed);
+                            return;
+                        }
+                    };
+                drop(runtime_worker);
                 let result_failed = result.load_error.is_some()
                     || result
                         .tests
@@ -329,7 +340,8 @@ fn run_files(options: RunFilesOptions) -> Result<Vec<FileResult>, i32> {
     Ok(results)
 }
 
-struct NodeWorkerConfig {
+#[derive(Clone)]
+struct RuntimeWorkerConfig {
     node: OsString,
     runner: PathBuf,
     cwd: PathBuf,
@@ -338,12 +350,12 @@ struct NodeWorkerConfig {
     filter: Option<String>,
 }
 
-struct NodeWorker {
-    process: Mutex<NodeWorkerProcess>,
-    config: NodeWorkerConfig,
+struct RuntimeWorker {
+    process: Mutex<RuntimeWorkerProcess>,
+    config: RuntimeWorkerConfig,
 }
 
-struct NodeWorkerProcess {
+struct RuntimeWorkerProcess {
     child: Child,
     stdin: Option<ChildStdin>,
     stdout: BufReader<ChildStdout>,
@@ -368,8 +380,8 @@ struct WorkerEvent {
     test: reporter::TestResult,
 }
 
-impl NodeWorker {
-    fn new(config: NodeWorkerConfig) -> Result<Self, i32> {
+impl RuntimeWorker {
+    fn new(config: RuntimeWorkerConfig) -> Result<Self, i32> {
         let mut child = Command::new(&config.node)
             .arg(&config.runner)
             .arg("--cwd")
@@ -383,21 +395,21 @@ impl NodeWorker {
             .stderr(Stdio::inherit())
             .spawn()
             .unwrap_or_else(|error| {
-                eprintln!("failed to start node worker: {error}");
+                eprintln!("failed to start runtime worker: {error}");
                 std::process::exit(2);
             });
         let stdin = child.stdin.take().ok_or_else(|| {
             cleanup_child(&mut child);
-            eprintln!("failed to open node worker stdin");
+            eprintln!("failed to open runtime worker stdin");
             1
         })?;
         let stdout = child.stdout.take().ok_or_else(|| {
             cleanup_child(&mut child);
-            eprintln!("failed to open node worker stdout");
+            eprintln!("failed to open runtime worker stdout");
             1
         })?;
         Ok(Self {
-            process: Mutex::new(NodeWorkerProcess {
+            process: Mutex::new(RuntimeWorkerProcess {
                 child,
                 stdin: Some(stdin),
                 stdout: BufReader::new(stdout),
@@ -424,17 +436,17 @@ impl NodeWorker {
             eprintln!("failed to serialize worker request: {error}");
             1
         })?;
-        let mut process = self.process.lock().expect("node worker lock poisoned");
+        let mut process = self.process.lock().expect("runtime worker lock poisoned");
         let stdin = process.stdin.as_mut().ok_or_else(|| {
-            eprintln!("node worker stdin is closed");
+            eprintln!("runtime worker stdin is closed");
             1
         })?;
         writeln!(stdin, "{payload}").map_err(|error| {
-            eprintln!("failed to write to node worker: {error}");
+            eprintln!("failed to write to runtime worker: {error}");
             1
         })?;
         stdin.flush().map_err(|error| {
-            eprintln!("failed to flush node worker request: {error}");
+            eprintln!("failed to flush runtime worker request: {error}");
             1
         })?;
 
@@ -443,11 +455,11 @@ impl NodeWorker {
         loop {
             line.clear();
             let bytes = process.stdout.read_line(&mut line).map_err(|error| {
-                eprintln!("failed to read node worker output: {error}");
+                eprintln!("failed to read runtime worker output: {error}");
                 1
             })?;
             if bytes == 0 {
-                eprintln!("node worker exited before returning test result");
+                eprintln!("runtime worker exited before returning test result");
                 return Err(1);
             }
             let line = line.trim_end_matches(['\r', '\n']);
@@ -479,7 +491,7 @@ impl NodeWorker {
     }
 }
 
-impl Drop for NodeWorker {
+impl Drop for RuntimeWorker {
     fn drop(&mut self) {
         if let Ok(mut process) = self.process.lock() {
             if let Some(mut stdin) = process.stdin.take() {
