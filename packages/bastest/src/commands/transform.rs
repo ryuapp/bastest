@@ -128,7 +128,7 @@ pub fn transform_test_file(
 
     let rewritten = rewrite_assert_calls(
         file,
-        &rewrite_module_specifiers(file, &rewrite_import_meta_test(&source), package_root)?,
+        &rewrite_module_specifiers(file, &source, package_root)?,
     )?;
     let code = if matches!(extension, "jsx" | "tsx") {
         transform_jsx(file, &rewritten)?
@@ -955,73 +955,6 @@ fn transform_jsx(file: &Path, source: &str) -> Result<String, String> {
     Ok(result.code)
 }
 
-fn rewrite_import_meta_test(source: &str) -> String {
-    const TARGET: &str = "import.meta.test";
-    let mut output = String::with_capacity(source.len());
-    let mut cursor = 0;
-    let bytes = source.as_bytes();
-    let mut index = 0;
-
-    while index < bytes.len() {
-        match bytes[index] {
-            b'\'' | b'"' | b'`' => {
-                index = skip_string(bytes, index);
-            }
-            b'/' if bytes.get(index + 1) == Some(&b'/') => {
-                index = skip_line_comment(bytes, index + 2);
-            }
-            b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                index = skip_block_comment(bytes, index + 2);
-            }
-            _ if bytes[index..].starts_with(TARGET.as_bytes()) => {
-                output.push_str(&source[cursor..index]);
-                output.push_str("true");
-                index += TARGET.len();
-                cursor = index;
-            }
-            _ => {
-                index += 1;
-            }
-        }
-    }
-
-    output.push_str(&source[cursor..]);
-    output
-}
-
-fn skip_string(bytes: &[u8], start: usize) -> usize {
-    let quote = bytes[start];
-    let mut index = start + 1;
-    while index < bytes.len() {
-        if bytes[index] == b'\\' {
-            index = (index + 2).min(bytes.len());
-            continue;
-        }
-        if bytes[index] == quote {
-            return index + 1;
-        }
-        index += 1;
-    }
-    bytes.len()
-}
-
-fn skip_line_comment(bytes: &[u8], mut index: usize) -> usize {
-    while index < bytes.len() && bytes[index] != b'\n' {
-        index += 1;
-    }
-    index
-}
-
-fn skip_block_comment(bytes: &[u8], mut index: usize) -> usize {
-    while index + 1 < bytes.len() {
-        if bytes[index] == b'*' && bytes[index + 1] == b'/' {
-            return index + 2;
-        }
-        index += 1;
-    }
-    bytes.len()
-}
-
 fn rewrite_module_specifiers(
     file: &Path,
     source: &str,
@@ -1042,7 +975,15 @@ fn rewrite_module_specifiers(
     collector.visit_program(&parsed.program);
     let parent = file.parent().unwrap_or_else(|| Path::new("."));
     let runtime = runtime_module_specifier(package_root)?;
-    let mut replacements = Vec::new();
+    let mut replacements = collector
+        .import_meta_tests
+        .into_iter()
+        .map(|span| SpanReplacement {
+            start: span.start as usize,
+            end: span.end as usize,
+            text: "true".to_string(),
+        })
+        .collect::<Vec<_>>();
     for specifier in collector.specifiers {
         let replacement = if specifier.value == "bastest" {
             Some(runtime.clone())
@@ -1065,6 +1006,7 @@ fn rewrite_module_specifiers(
 struct ModuleSpecifierCollector<'s> {
     scoping: &'s Scoping,
     specifiers: Vec<ModuleSpecifier>,
+    import_meta_tests: Vec<Span>,
 }
 
 struct ModuleSpecifier {
@@ -1077,6 +1019,7 @@ impl<'s> ModuleSpecifierCollector<'s> {
         Self {
             scoping,
             specifiers: Vec::new(),
+            import_meta_tests: Vec::new(),
         }
     }
 
@@ -1089,6 +1032,22 @@ impl<'s> ModuleSpecifierCollector<'s> {
 }
 
 impl<'a> Visit<'a> for ModuleSpecifierCollector<'_> {
+    fn visit_static_member_expression(
+        &mut self,
+        member: &oxc_ast::ast::StaticMemberExpression<'a>,
+    ) {
+        if matches!(
+            &member.object,
+            Expression::MetaProperty(meta)
+                if meta.meta.name == "import"
+                    && meta.property.name == "meta"
+                    && member.property.name == "test"
+        ) {
+            self.import_meta_tests.push(member.span);
+        }
+        walk::walk_static_member_expression(self, member);
+    }
+
     fn visit_import_declaration(&mut self, declaration: &ImportDeclaration<'a>) {
         let type_only = declaration.import_kind == ImportOrExportKind::Type
             || declaration.specifiers.as_ref().is_some_and(|specifiers| {
@@ -1466,6 +1425,28 @@ mod tests {
             rewrite_bundled_module(Path::new("C:/virtual/module.js"), source, &HashMap::new(),)
                 .is_none()
         );
+    }
+
+    #[test]
+    fn import_meta_test_is_rewritten_from_ast_only() {
+        let source = r#"
+            const direct = import.meta.test;
+            const template = `enabled: ${import.meta.test}`;
+            const text = "import.meta.test";
+            const pattern = /import\.meta\.test/;
+            const similarly_named = import.meta.testing;
+            // import.meta.test
+        "#;
+        let transformed =
+            rewrite_module_specifiers(Path::new("C:/virtual/fixture.ts"), source, Path::new("."))
+                .unwrap();
+
+        assert!(transformed.contains("const direct = true;"));
+        assert!(transformed.contains("const template = `enabled: ${true}`;"));
+        assert!(transformed.contains("const text = \"import.meta.test\";"));
+        assert!(transformed.contains(r"const pattern = /import\.meta\.test/;"));
+        assert!(transformed.contains("const similarly_named = import.meta.testing;"));
+        assert!(transformed.contains("// import.meta.test"));
     }
 
     #[test]
